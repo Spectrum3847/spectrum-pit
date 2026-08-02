@@ -1,0 +1,334 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /userProfiles/{uid} {
+
+      allow read: if isAuthed()
+        && (request.auth.uid == uid
+            || isAdmin()
+            || isPit()
+            || isDeveloper());
+      allow create: if isAuthed()
+        && request.auth.uid == uid
+        && isValidNewProfile(request.resource.data);
+      allow update: if isAuthed()
+        && isAdmin()
+        && request.auth.uid != uid;
+    }
+
+    match /appConfig/{docId} {
+      allow read: if isAuthed() && isMember()
+        && (docId != 'notifications' || isAdmin());
+      allow write: if isAuthed() && isAdmin();
+    }
+
+    match /inventoryItems/{itemId} {
+      allow read: if isAuthed() && isMember();
+      allow create: if isAuthed() && isMember()
+        && isValidInventoryItem(request.resource.data);
+      allow update: if isAuthed() && isMember()
+        && isValidInventoryItem(request.resource.data)
+        && isMonotonicUpdate(resource.data, request.resource.data);
+      allow delete: if isAuthed() && isMember();
+    }
+
+    match /packingRecords/{recordId} {
+      allow read: if isAuthed() && isMember();
+      allow create: if isAuthed() && isMember()
+        && isValidPackingRecord(request.resource.data);
+      allow update: if isAuthed() && isMember()
+        && isValidPackingRecord(request.resource.data)
+        && isMonotonicUpdate(resource.data, request.resource.data);
+      allow delete: if isAuthed() && isMember();
+    }
+
+    match /borrowRecords/{recordId} {
+      allow read: if isAuthed() && isMember();
+      allow create: if isAuthed() && isMember()
+        && isValidBorrowRecord(request.resource.data);
+      allow update: if isAuthed() && isMember()
+        && isValidBorrowRecord(request.resource.data)
+        && isMonotonicUpdate(resource.data, request.resource.data);
+      allow delete: if isAuthed() && isMember();
+    }
+
+    match /mapLocations/{locationId} {
+      allow read: if isAuthed() && isMember();
+      allow create: if isAuthed() && isMember()
+        && isValidMapLocation(request.resource.data);
+      allow update: if isAuthed() && isMember()
+        && isValidMapLocation(request.resource.data)
+        && isMonotonicUpdate(resource.data, request.resource.data);
+      allow delete: if isAuthed() && isMember();
+    }
+
+    match /mapDiagrams/{mapType} {
+      allow read: if isAuthed() && isMember();
+      allow create: if isAuthed() && isMember()
+        && mapType in ['lab', 'pit']
+        && isValidMapDiagram(request.resource.data);
+      allow update: if isAuthed() && isMember()
+        && isValidMapDiagram(request.resource.data)
+        && isMonotonicUpdate(resource.data, request.resource.data);
+      allow delete: if isAuthed() && isMember();
+    }
+
+    match /pitShifts/{shiftId} {
+      allow read: if isAuthed() && isMember();
+      allow create: if isAuthed() && isMember()
+        && isValidPitShift(request.resource.data);
+      allow update: if isAuthed() && isMember()
+        && isValidPitShift(request.resource.data)
+        && isMonotonicUpdate(resource.data, request.resource.data);
+      allow delete: if isAuthed() && isMember();
+    }
+
+    match /bugReports/{reportId} {
+      allow read: if isAuthed() && (isAdmin() || isDeveloper());
+      allow create: if isAuthed() && isMember()
+        && request.resource.data.reporterUid == request.auth.uid
+        && isValidBugReport(request.resource.data);
+      allow update, delete: if false;
+    }
+
+    match /telemetry/{eventId} {
+      allow read: if false;
+      allow create: if isAuthed()
+        && isValidTelemetry(request.resource.data);
+      allow update, delete: if false;
+    }
+
+    function isAuthed() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      let path = /databases/$(database)/documents/userProfiles/$(request.auth.uid);
+      return exists(path) && hasAdminRole(get(path).data);
+    }
+
+    function hasAdminRole(data) {
+      return (data.roles is list && data.roles.hasAny(['admin'])) ||
+             (data.role is string && data.role == 'admin');
+    }
+
+    function isPit() {
+      let path = /databases/$(database)/documents/userProfiles/$(request.auth.uid);
+      return exists(path) && hasPitRole(get(path).data);
+    }
+
+    function hasPitRole(data) {
+      return (data.roles is list && data.roles.hasAny(['pit'])) ||
+             (data.role is string && data.role == 'pit');
+    }
+
+    function isDeveloper() {
+      let path = /databases/$(database)/documents/userProfiles/$(request.auth.uid);
+      return exists(path) && hasDeveloperRole(get(path).data);
+    }
+
+    function hasDeveloperRole(data) {
+      return (data.roles is list && data.roles.hasAny(['developer'])) ||
+             (data.role is string && data.role == 'developer');
+    }
+
+    function isMember() {
+      let path = /databases/$(database)/documents/userProfiles/$(request.auth.uid);
+      return exists(path) && hasMemberRole(get(path).data);
+    }
+
+    function hasMemberRole(data) {
+      return (data.roles is list
+              && data.roles.hasAny(['pit', 'admin', 'developer'])) ||
+             (data.role is string
+              && data.role in ['pit', 'admin', 'developer']);
+    }
+
+    function isValidNewProfile(data) {
+      return data.uid == request.auth.uid
+        && data.keys().hasOnly(['uid', 'displayName', 'email', 'roles', 'createdAt'])
+        && data.roles is list
+        && data.roles.size() == 1
+        && data.roles.hasAll(['viewer'])
+        && data.displayName is string
+        && data.displayName.size() <= 256
+        && (!('email' in data) || (data.email is string && data.email.size() <= 320))
+        && (!('createdAt' in data) || isSaneTimestamp(data.createdAt));
+    }
+
+    function isValidInventoryItem(data) {
+      return data.keys().hasOnly(['name', 'labLocation', 'pitLocation',
+              'mapRef', 'status', 'updatedAt'])
+        && data.name is string
+        && data.name.size() > 0
+        && data.name.size() <= 256
+        && data.labLocation is string
+        && data.labLocation.size() <= 128
+        && data.pitLocation is string
+        && data.pitLocation.size() <= 128
+        && (!('mapRef' in data)
+            || (data.mapRef is string && data.mapRef.size() <= 256))
+        && data.status in ['inLab', 'inPit', 'borrowed']
+        && isSaneTimestamp(data.updatedAt);
+    }
+
+    function isValidPackingRecord(data) {
+      return data.keys().hasOnly(['itemId', 'packingStatus',
+              'photoRef', 'updatedAt'])
+        && data.itemId is string
+        && data.itemId.size() > 0
+        && data.itemId.size() <= 256
+        && data.packingStatus in ['packing', 'staging', 'loading', 'ready']
+        && (!('photoRef' in data)
+            || (data.photoRef is string && data.photoRef.size() <= 512))
+        && isSaneTimestamp(data.updatedAt);
+    }
+
+    function isValidBorrowRecord(data) {
+      return data.keys().hasOnly(['itemId', 'toolName', 'teamName',
+              'teamNumber', 'competition', 'checkedOutAt', 'estimatedReturn',
+              'checkedInAt', 'returned', 'updatedAt'])
+        && data.toolName is string
+        && data.toolName.size() > 0
+        && data.toolName.size() <= 256
+        && data.teamName is string
+        && data.teamName.size() <= 256
+        && data.teamNumber is int
+        && data.teamNumber >= 0
+        && data.teamNumber <= 99999
+        && data.competition is string
+        && data.competition.size() <= 256
+        && data.returned is bool
+        && isSaneTimestamp(data.checkedOutAt)
+        && isSaneTimestamp(data.updatedAt)
+        && (!('itemId' in data)
+            || (data.itemId is string && data.itemId.size() <= 256))
+        && (!('estimatedReturn' in data)
+            || isSaneTimestamp(data.estimatedReturn))
+        && (!('checkedInAt' in data)
+            || isSaneTimestamp(data.checkedInAt));
+    }
+
+    function isValidMapLocation(data) {
+      return data.keys().hasOnly(['name', 'mapType', 'x', 'y',
+              'inventoryItemId', 'updatedAt'])
+        && data.name is string
+        && data.name.size() > 0
+        && data.name.size() <= 256
+        && data.mapType in ['lab', 'pit']
+        && data.x is number
+        && data.x >= 0
+        && data.x <= 1
+        && data.y is number
+        && data.y >= 0
+        && data.y <= 1
+        && (!('inventoryItemId' in data)
+            || (data.inventoryItemId is string
+                && data.inventoryItemId.size() <= 256))
+        && isSaneTimestamp(data.updatedAt);
+    }
+
+    function isValidMapDiagram(data) {
+      return data.keys().hasOnly(['diagramKey', 'updatedAt'])
+        && data.diagramKey is string
+        && data.diagramKey.size() > 0
+        && data.diagramKey.size() <= 512
+        && isSaneTimestamp(data.updatedAt);
+    }
+
+    function isValidPitShift(data) {
+      return data.keys().hasOnly(['label', 'kind', 'competition',
+              'assignedUids', 'assignedNames', 'startMatch', 'endMatch',
+              'startsAt', 'endsAt', 'notes', 'updatedAt'])
+        && data.label is string
+        && data.label.size() <= 256
+        && data.kind in ['loadIn', 'matchBlock', 'pitDuty', 'loadOut',
+              'unavailable']
+        && data.competition is string
+        && data.competition.size() <= 256
+        && data.assignedUids is list
+        && data.assignedUids.size() <= 32
+        && data.assignedNames is list
+        && data.assignedNames.size() <= 32
+        && (!('startMatch' in data)
+            || (data.startMatch is int
+                && data.startMatch >= 0
+                && data.startMatch <= 999))
+        && (!('endMatch' in data)
+            || (data.endMatch is int
+                && data.endMatch >= 0
+                && data.endMatch <= 999))
+        && (!('startsAt' in data) || isSaneTimestamp(data.startsAt))
+        && (!('endsAt' in data) || isSaneTimestamp(data.endsAt))
+        && (!('notes' in data)
+            || (data.notes is string && data.notes.size() <= 2048))
+        && isSaneTimestamp(data.updatedAt);
+    }
+
+    function isValidBugReport(data) {
+      return data.keys().hasOnly(['reporterUid', 'reporterName', 'title',
+              'body', 'status', 'createdAt', 'appVersion', 'platform',
+              'osVersion', 'deviceInfo', 'roles', 'id'])
+        && data.reporterUid is string
+        && data.reporterUid.size() > 0
+        && data.reporterUid.size() <= 128
+        && data.reporterName is string
+        && data.reporterName.size() <= 128
+        && data.title is string
+        && data.title.size() > 0
+        && data.title.size() <= 200
+        && data.body is string
+        && data.body.size() <= 4096
+        && data.status == 'new'
+        && isSaneTimestamp(data.createdAt)
+        && (!('appVersion' in data)
+            || (data.appVersion is string && data.appVersion.size() <= 64))
+        && (!('platform' in data)
+            || (data.platform is string && data.platform.size() <= 64))
+        && (!('osVersion' in data)
+            || (data.osVersion is string && data.osVersion.size() <= 128))
+        && (!('deviceInfo' in data)
+            || (data.deviceInfo is string && data.deviceInfo.size() <= 256))
+        && (!('roles' in data)
+            || (data.roles is string && data.roles.size() <= 128));
+    }
+
+    function isValidTelemetry(data) {
+      return data.keys().hasOnly(['id', 'type', 'deviceId', 'appVersion',
+              'platform', 'osVersion', 'locale', 'detail', 'createdAt'])
+        && data.id is string
+        && data.id.size() > 0
+        && data.id.size() <= 64
+        && data.type is string
+        && data.type.size() > 0
+        && data.type.size() <= 64
+        && data.deviceId is string
+        && data.deviceId.size() > 0
+        && data.deviceId.size() <= 64
+        && isSaneTimestamp(data.createdAt)
+        && (!('appVersion' in data)
+            || (data.appVersion is string && data.appVersion.size() <= 64))
+        && (!('platform' in data)
+            || (data.platform is string && data.platform.size() <= 64))
+        && (!('osVersion' in data)
+            || (data.osVersion is string && data.osVersion.size() <= 128))
+        && (!('locale' in data)
+            || (data.locale is string && data.locale.size() <= 32))
+        && (!('detail' in data)
+            || (data.detail is string && data.detail.size() <= 128));
+    }
+
+    function isSaneTimestamp(value) {
+      return value is string
+        && value.size() >= 20
+        && value.size() <= 64
+        && value >= '2020'
+        && value < '2100';
+    }
+
+    function isMonotonicUpdate(prev, next) {
+      return next.updatedAt >= prev.updatedAt;
+    }
+  }
+}

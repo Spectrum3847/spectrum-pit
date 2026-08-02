@@ -1,0 +1,912 @@
+import 'dart:math' as math;
+import 'dart:typed_data';
+
+import 'package:flutter/material.dart';
+
+import '../models/packing_record.dart';
+import '../services/photo_service.dart';
+import '../state/packing_controller.dart';
+import '../theme/pit_palette.dart';
+import 'packing_photo.dart';
+
+class PackingTab extends StatefulWidget {
+  const PackingTab({
+    required this.controller,
+    required this.photoService,
+    super.key,
+  });
+
+  final PackingController controller;
+  final PhotoService photoService;
+
+  @override
+  State<PackingTab> createState() => _PackingTabState();
+}
+
+class _PackingTabState extends State<PackingTab> {
+  final Set<String> _busy = <String>{};
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: widget.controller,
+      builder: (context, _) {
+        final items = widget.controller.items;
+        return Stack(
+          children: [
+            items.isEmpty
+                ? _EmptyBoard(onAdd: () => _openEditor())
+                : ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+                    itemCount: items.length,
+                    itemBuilder: (context, i) => _PackingRow(
+                      record: items[i],
+                      photoService: widget.photoService,
+                      photoBusy: _busy.contains(items[i].id),
+                      onTap: () => _openEditor(record: items[i]),
+                      onAdvance: () => _advance(items[i]),
+                      onPhotoTap: () => _handlePhoto(items[i]),
+                    ),
+                  ),
+            Positioned(
+              right: 16,
+              bottom: 16,
+              child: FloatingActionButton.extended(
+                heroTag: null,
+                onPressed: () => _openEditor(),
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('Add item'),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _advance(PackingRecord record) {
+    return widget.controller
+        .upsert(
+          record.copyWith(
+            packingStatus: _nextStatus(record.packingStatus),
+            updatedAt: DateTime.now().toUtc(),
+          ),
+        )
+        .catchError(
+          (Object error) => _showFailure('update "${record.itemId}"', error),
+        );
+  }
+
+  Future<void> _handlePhoto(PackingRecord record) {
+    if (_busy.contains(record.id)) return Future<void>.value();
+    return record.photoRef == null ? _capture(record) : _openPhoto(record);
+  }
+
+  Future<void> _capture(PackingRecord record) async {
+    final source = await choosePhotoSource(
+      context,
+      widget.photoService.sources,
+    );
+    if (source == null || !mounted) return;
+    setState(() => _busy.add(record.id));
+    String? key;
+    try {
+      key = await widget.photoService.capture(source);
+    } catch (error) {
+      _showFailure('add a photo to "${record.itemId}"', error);
+    } finally {
+      if (mounted) setState(() => _busy.remove(record.id));
+    }
+    if (key == null || !mounted) return;
+
+    final current = _current(record);
+    try {
+      await widget.controller.upsert(
+        current.copyWith(photoRef: key, updatedAt: DateTime.now().toUtc()),
+      );
+    } catch (error) {
+      _showFailure('save the photo for "${current.itemId}"', error);
+      return;
+    }
+    final previous = current.photoRef;
+    if (previous != null) await _deleteKey(previous, current.itemId);
+  }
+
+  Future<void> _openPhoto(PackingRecord record) async {
+    final action = await Navigator.of(context).push<PackingPhotoAction>(
+      MaterialPageRoute<PackingPhotoAction>(
+        builder: (_) => PackingPhotoScreen(
+          photoService: widget.photoService,
+          photoRef: record.photoRef!,
+          itemId: record.itemId,
+          updatedAt: record.updatedAt,
+        ),
+      ),
+    );
+    if (action == null || !mounted) return;
+    switch (action) {
+      case PackingPhotoAction.replace:
+        await _capture(_current(record));
+      case PackingPhotoAction.remove:
+        await _removePhoto(_current(record));
+    }
+  }
+
+  Future<void> _removePhoto(PackingRecord record) async {
+    final key = record.photoRef;
+    if (key == null) return;
+    try {
+      await widget.controller.upsert(
+        PackingRecord(
+          id: record.id,
+          itemId: record.itemId,
+          packingStatus: record.packingStatus,
+          updatedAt: DateTime.now().toUtc(),
+        ),
+      );
+    } catch (error) {
+      _showFailure('remove the photo from "${record.itemId}"', error);
+      return;
+    }
+    await _deleteKey(key, record.itemId);
+  }
+
+  Future<void> _deleteKey(String key, String itemId) async {
+    try {
+      await widget.photoService.delete(key);
+    } catch (error) {
+      _showFailure('delete the old photo for "$itemId"', error);
+    }
+  }
+
+  PackingRecord _current(PackingRecord record) => widget.controller.items
+      .firstWhere((item) => item.id == record.id, orElse: () => record);
+
+  void _showFailure(String action, Object error) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Could not $action: $error')));
+  }
+
+  Future<void> _openEditor({PackingRecord? record}) {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => _RecordEditorSheet(
+        record: record,
+        photoService: widget.photoService,
+        onSubmit: (result) {
+          widget.controller
+              .upsert(result)
+              .catchError(
+                (Object error) =>
+                    _showFailure('save "${result.itemId}"', error),
+              );
+          Navigator.of(sheetContext).pop();
+        },
+        onDelete: record == null
+            ? null
+            : () async {
+                final confirmed = await _confirmDelete(
+                  sheetContext,
+                  record.itemId,
+                );
+                if (!confirmed) return;
+                await widget.controller
+                    .delete(record.id)
+                    .catchError(
+                      (Object error) =>
+                          _showFailure('delete "${record.itemId}"', error),
+                    );
+
+                final photoRef = record.photoRef;
+                if (photoRef != null) {
+                  await _deleteKey(photoRef, record.itemId);
+                }
+                if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+              },
+      ),
+    );
+  }
+
+  Future<bool> _confirmDelete(BuildContext context, String itemId) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete packing record?'),
+        content: Text(
+          'Remove item "$itemId" from the packing list. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    return ok ?? false;
+  }
+}
+
+PackingStatus _nextStatus(PackingStatus status) => switch (status) {
+  PackingStatus.packing => PackingStatus.staging,
+  PackingStatus.staging => PackingStatus.loading,
+  PackingStatus.loading => PackingStatus.ready,
+  PackingStatus.ready => PackingStatus.packing,
+};
+
+String _statusLabel(PackingStatus status) => switch (status) {
+  PackingStatus.packing => 'Packing',
+  PackingStatus.staging => 'Staging',
+  PackingStatus.loading => 'Loading',
+  PackingStatus.ready => 'Ready',
+};
+
+IconData _statusIcon(PackingStatus status) => switch (status) {
+  PackingStatus.packing => Icons.inventory_2_outlined,
+  PackingStatus.staging => Icons.move_up_rounded,
+  PackingStatus.loading => Icons.local_shipping_outlined,
+  PackingStatus.ready => Icons.check_circle_outline,
+};
+
+Color _statusColor(BuildContext context, PackingStatus status) {
+  final dark = Theme.of(context).brightness == Brightness.dark;
+  return switch (status) {
+    PackingStatus.packing =>
+      dark ? PitPalette.statusPacking : PitPalette.lightStatusPacking,
+    PackingStatus.staging =>
+      dark ? PitPalette.statusStaging : PitPalette.lightStatusStaging,
+    PackingStatus.loading =>
+      dark ? PitPalette.statusLoading : PitPalette.lightStatusLoading,
+    PackingStatus.ready =>
+      dark ? PitPalette.statusReady : PitPalette.lightStatusReady,
+  };
+}
+
+class _PackingRow extends StatelessWidget {
+  const _PackingRow({
+    required this.record,
+    required this.photoService,
+    required this.photoBusy,
+    required this.onTap,
+    required this.onAdvance,
+    required this.onPhotoTap,
+  });
+
+  final PackingRecord record;
+  final PhotoService photoService;
+  final bool photoBusy;
+  final VoidCallback onTap;
+  final VoidCallback onAdvance;
+  final VoidCallback onPhotoTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: PitPalette.surfaceOf(context),
+        borderRadius: BorderRadius.circular(PitPalette.radiusSm),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(PitPalette.radiusSm),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 56),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(PitPalette.radiusSm),
+              border: Border.all(color: PitPalette.outlineOf(context)),
+            ),
+            padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    record.itemId.isEmpty ? 'Untitled item' : record.itemId,
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                _PhotoSlot(
+                  photoRef: record.photoRef,
+                  photoService: photoService,
+                  busy: photoBusy,
+                  onTap: onPhotoTap,
+                ),
+                const SizedBox(width: 8),
+                _StatusChip(status: record.packingStatus, onTap: onAdvance),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusChip extends StatelessWidget {
+  const _StatusChip({required this.status, required this.onTap});
+
+  final PackingStatus status;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _statusColor(context, status);
+    final fg = color;
+    final bg = color.withValues(alpha: 0.2);
+    return Material(
+      color: bg,
+      borderRadius: BorderRadius.circular(PitPalette.radiusSm),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(PitPalette.radiusSm),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 40),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(PitPalette.radiusSm),
+            border: Border.all(color: color),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(_statusIcon(status), size: 16, color: fg),
+              const SizedBox(width: 6),
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    _statusLabel(status),
+                    softWrap: false,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.labelLarge?.copyWith(color: fg),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PhotoSlot extends StatefulWidget {
+  const _PhotoSlot({
+    required this.photoRef,
+    required this.photoService,
+    required this.busy,
+    required this.onTap,
+    this.size = 48,
+  });
+
+  final String? photoRef;
+  final PhotoService photoService;
+
+  final bool busy;
+  final VoidCallback onTap;
+
+  final double size;
+
+  @override
+  State<_PhotoSlot> createState() => _PhotoSlotState();
+}
+
+class _PhotoSlotState extends State<_PhotoSlot> {
+  Uint8List? _bytes;
+  bool _loading = false;
+  bool _failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final ref = widget.photoRef;
+    if (ref != null) {
+      _loading = true;
+      _fetch(ref);
+    }
+  }
+
+  @override
+  void didUpdateWidget(_PhotoSlot old) {
+    super.didUpdateWidget(old);
+    if (old.photoRef == widget.photoRef) return;
+    final ref = widget.photoRef;
+    setState(() {
+      _bytes = null;
+      _failed = false;
+      _loading = ref != null;
+    });
+    if (ref != null) _fetch(ref);
+  }
+
+  void _retry() {
+    final ref = widget.photoRef;
+    if (ref == null) return;
+    setState(() {
+      _failed = false;
+      _loading = true;
+    });
+    _fetch(ref);
+  }
+
+  Future<void> _fetch(String ref) async {
+    Uint8List? bytes;
+    var failed = false;
+    try {
+      bytes = await widget.photoService.fetch(ref);
+    } catch (_) {
+      failed = true;
+    }
+
+    if (!mounted || ref != widget.photoRef) return;
+    setState(() {
+      _bytes = bytes;
+      _failed = failed;
+      _loading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = PitPalette.inkMutedOf(context);
+    final empty = widget.photoRef == null;
+    final size = widget.size;
+    final radius = BorderRadius.circular(PitPalette.radiusSm);
+    final (child, hint) = _content(context, muted);
+    return Tooltip(
+      message: hint,
+      child: Material(
+        color: empty ? null : PitPalette.surfaceStrongOf(context),
+        borderRadius: radius,
+        child: InkWell(
+          onTap: _failed ? _retry : widget.onTap,
+          borderRadius: radius,
+          child: SizedBox(
+            width: size,
+            height: size,
+            child: empty
+                ? CustomPaint(
+                    painter: _DashedRectPainter(
+                      color: PitPalette.outlineOf(context),
+                      radius: PitPalette.radiusSm,
+                    ),
+                    child: Center(child: child),
+                  )
+                : DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: radius,
+                      border: Border.all(color: PitPalette.outlineOf(context)),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: radius,
+                      child: Center(child: child),
+                    ),
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  (Widget, String) _content(BuildContext context, Color muted) {
+    final glyph = math.max(20.0, widget.size * 0.34);
+    if (widget.busy) {
+      return (
+        SizedBox(
+          width: glyph,
+          height: glyph,
+          child: CircularProgressIndicator(strokeWidth: 2, color: muted),
+        ),
+        'Uploading the photo',
+      );
+    }
+    if (widget.photoRef == null) {
+      return (
+        Icon(Icons.add_a_photo_outlined, size: glyph, color: muted),
+        'Add a packing photo',
+      );
+    }
+    if (_loading) {
+      return (
+        SizedBox(
+          width: glyph,
+          height: glyph,
+          child: CircularProgressIndicator(strokeWidth: 2, color: muted),
+        ),
+        'Loading the photo',
+      );
+    }
+    if (_failed) {
+      return (
+        Icon(
+          Icons.error_outline_rounded,
+          size: glyph,
+          color: Theme.of(context).brightness == Brightness.dark
+              ? PitPalette.statusOverdue
+              : PitPalette.lightStatusOverdue,
+        ),
+        'Photo did not load. Tap to try again.',
+      );
+    }
+    final bytes = _bytes;
+    if (bytes == null) {
+      return (
+        Icon(Icons.cloud_off_rounded, size: glyph, color: muted),
+        'Sign in with your team account to see photos',
+      );
+    }
+    return (
+      Image.memory(
+        bytes,
+        width: widget.size,
+        height: widget.size,
+        fit: BoxFit.cover,
+        gaplessPlayback: true,
+      ),
+      'Open the packing photo',
+    );
+  }
+}
+
+class _PhotoSection extends StatelessWidget {
+  const _PhotoSection({
+    required this.photoRef,
+    required this.photoService,
+    required this.busy,
+    required this.size,
+    required this.onTap,
+  });
+
+  final String? photoRef;
+  final PhotoService photoService;
+  final bool busy;
+  final double size;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ref = photoRef;
+    if (ref != null) {
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: _PhotoSlot(
+          photoRef: ref,
+          photoService: photoService,
+          busy: busy,
+          onTap: onTap,
+          size: size,
+        ),
+      );
+    }
+    final muted = PitPalette.inkMutedOf(context);
+    final glyph = math.max(20.0, size * 0.34);
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: Material(
+          borderRadius: BorderRadius.circular(PitPalette.radiusSm),
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(PitPalette.radiusSm),
+            child: CustomPaint(
+              painter: _DashedRectPainter(
+                color: PitPalette.outlineOf(context),
+                radius: PitPalette.radiusSm,
+              ),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (busy)
+                      SizedBox(
+                        width: glyph,
+                        height: glyph,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: muted,
+                        ),
+                      )
+                    else
+                      Icon(
+                        Icons.add_a_photo_outlined,
+                        size: glyph,
+                        color: muted,
+                      ),
+                    const SizedBox(height: 6),
+                    Text(
+                      busy ? 'Uploading' : 'Add photo',
+                      style: Theme.of(
+                        context,
+                      ).textTheme.labelMedium?.copyWith(color: muted),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyBoard extends StatelessWidget {
+  const _EmptyBoard({required this.onAdd});
+
+  final VoidCallback onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = PitPalette.inkMutedOf(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: CustomPaint(
+          painter: _DashedRectPainter(
+            color: PitPalette.outlineOf(context),
+            radius: PitPalette.radiusSm,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.inventory_2_outlined, size: 40, color: muted),
+                const SizedBox(height: 12),
+                Text(
+                  'The packing list is empty',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Add items to start tracking the load-out.',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(color: muted),
+                ),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: onAdd,
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('Add item'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DashedRectPainter extends CustomPainter {
+  _DashedRectPainter({required this.color, required this.radius});
+
+  final Color color;
+  final double radius;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    final path = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(radius)),
+      );
+    const dash = 6.0;
+    const gap = 4.0;
+    for (final metric in path.computeMetrics()) {
+      var distance = 0.0;
+      while (distance < metric.length) {
+        final end = math.min(distance + dash, metric.length);
+        canvas.drawPath(metric.extractPath(distance, end), paint);
+        distance = end + gap;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedRectPainter old) =>
+      old.color != color || old.radius != radius;
+}
+
+class _RecordEditorSheet extends StatefulWidget {
+  const _RecordEditorSheet({
+    required this.record,
+    required this.photoService,
+    required this.onSubmit,
+    this.onDelete,
+  });
+
+  final PackingRecord? record;
+  final PhotoService photoService;
+  final ValueChanged<PackingRecord> onSubmit;
+  final Future<void> Function()? onDelete;
+
+  @override
+  State<_RecordEditorSheet> createState() => _RecordEditorSheetState();
+}
+
+class _RecordEditorSheetState extends State<_RecordEditorSheet> {
+  static const double _photoSize = 120;
+
+  late final TextEditingController _itemId;
+  late PackingStatus _status;
+
+  String? _photoRef;
+
+  bool _photoIsCaptured = false;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final record = widget.record;
+    _itemId = TextEditingController(text: record?.itemId ?? '');
+    _status = record?.packingStatus ?? PackingStatus.packing;
+    _photoRef = record?.photoRef;
+  }
+
+  @override
+  void dispose() {
+    _itemId.dispose();
+    super.dispose();
+  }
+
+  Future<void> _capturePhoto() async {
+    if (_busy) return;
+    final source = await choosePhotoSource(
+      context,
+      widget.photoService.sources,
+    );
+    if (source == null || !mounted) return;
+    setState(() => _busy = true);
+    String? key;
+    try {
+      key = await widget.photoService.capture(source);
+    } catch (error) {
+      _showFailure('add a photo', error);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+    if (key == null || !mounted) return;
+    final previous = _photoRef;
+    final previousWasCaptured = _photoIsCaptured;
+    setState(() {
+      _photoRef = key;
+      _photoIsCaptured = true;
+    });
+    if (previousWasCaptured && previous != null) {
+      try {
+        await widget.photoService.delete(previous);
+      } catch (error) {
+        _showFailure('delete the previous photo', error);
+      }
+    }
+  }
+
+  void _showFailure(String action, Object error) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Could not $action: $error')));
+  }
+
+  void _save() {
+    final itemId = _itemId.text.trim();
+    if (itemId.isEmpty) return;
+    final existing = widget.record;
+    widget.onSubmit(
+      PackingRecord(
+        id: existing?.id ?? 'pack_${DateTime.now().microsecondsSinceEpoch}',
+        itemId: itemId,
+        packingStatus: _status,
+        photoRef: _photoRef,
+        updatedAt: DateTime.now().toUtc(),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final editing = widget.record != null;
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        top: 16,
+        bottom: 16 + MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    editing ? 'Edit packing item' : 'Add packing item',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ),
+                if (widget.onDelete != null)
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline_rounded),
+                    tooltip: 'Delete',
+                    onPressed: widget.onDelete,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _itemId,
+              autofocus: !editing,
+              textCapitalization: TextCapitalization.sentences,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                labelText: 'Item name',
+                hintText: 'DeWalt Drill Kit',
+              ),
+            ),
+            const SizedBox(height: 16),
+            _PhotoSection(
+              photoRef: _photoRef,
+              photoService: widget.photoService,
+              busy: _busy,
+              size: _photoSize,
+              onTap: _capturePhoto,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Packing status',
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: PitPalette.inkMutedOf(context),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SegmentedButton<PackingStatus>(
+              segments: [
+                for (final status in PackingStatus.values)
+                  ButtonSegment<PackingStatus>(
+                    value: status,
+
+                    label: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(_statusLabel(status), softWrap: false),
+                    ),
+                    icon: Icon(_statusIcon(status)),
+                  ),
+              ],
+              selected: {_status},
+              onSelectionChanged: (s) => setState(() => _status = s.first),
+            ),
+            const SizedBox(height: 20),
+            FilledButton(
+              onPressed: _itemId.text.trim().isEmpty ? null : _save,
+              child: Text(editing ? 'Save' : 'Add item'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
