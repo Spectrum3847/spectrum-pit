@@ -81,12 +81,16 @@ void main() {
       final offlineSync = FakeMapDiagramSyncService(
         readFailure: Exception('firestore read failed'),
       );
+      final requests = <http.BaseRequest>[];
       final offlineStore = SyncedMapImageStore(
-        photoService: photoServiceReturningPng(),
+        photoService: fakePhotoService(requests: requests),
         diagramSync: offlineSync,
       );
       final fallback = await offlineStore.diagramFor(MapType.lab);
       expect(fallback, isNotNull, reason: 'offline read should use the cache');
+      // The fallback came entirely from the local cache: no network request
+      // was issued by the photo service.
+      expect(requests, isEmpty);
     });
 
     test('readKey throwing with no cached file returns null', () async {
@@ -184,10 +188,11 @@ void main() {
       expect(await store.diagramFor(MapType.lab), isNull);
     });
 
-    test('remote clear failure leaves the local diagram intact', () async {
-      // If the remote pointer cannot be cleared, the device must keep showing
-      // the diagram rather than drop to the empty state and disagree with the
-      // rest of the team (#155).
+    test('remote clear failure still cleans up the local cache', () async {
+      // Each remote step is best-effort on its own (#161): a failed remote
+      // pointer clear must not prevent the local cache and preferences from
+      // being removed. The remote pointer survives (the team still sees the
+      // diagram), but this device no longer claims it.
       final sync = FakeMapDiagramSyncService(
         readKeyValue: 'key-0.jpg',
         clearFailure: Exception('remote clear failed'),
@@ -198,14 +203,14 @@ void main() {
       );
       await store.pickDiagram(MapType.lab);
 
-      await expectLater(
-        store.clearDiagram(MapType.lab),
-        throwsA(isA<Exception>()),
-      );
+      // Completes instead of throwing: the failure is contained to the remote
+      // pointer step.
+      await store.clearDiagram(MapType.lab);
 
+      expect(await sync.readKey(MapType.lab), 'key-0.jpg');
       final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getString('$_r2KeyPref${MapType.lab.name}'), 'key-0.jpg');
-      expect(_appSupport.listSync(), isNotEmpty);
+      expect(prefs.getString('$_r2KeyPref${MapType.lab.name}'), isNull);
+      expect(_appSupport.listSync(), isEmpty);
     });
   });
 }

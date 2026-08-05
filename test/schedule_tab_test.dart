@@ -46,14 +46,18 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late FakePitShiftSyncService sync;
-  late PitShiftController controller;
+  PitShiftController? controller;
 
   setUp(() {
     sync = FakePitShiftSyncService();
+    // Cleared here, not only in tearDown: pumpTab assigns it, so a failure
+    // before that line would leave teardown disposing the previous test's
+    // controller (#169).
+    controller = null;
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
 
-  tearDown(() => controller.dispose());
+  tearDown(() => controller?.dispose());
 
   Future<void> pumpTab(
     WidgetTester tester, {
@@ -84,7 +88,7 @@ void main() {
     );
     await roleController.bootstrap();
     controller = PitShiftController(authService: auth, syncService: sync);
-    await controller.bootstrap();
+    await controller!.bootstrap();
     if (shifts.isNotEmpty && user != null) sync.emit(shifts);
 
     await tester.pumpWidget(
@@ -92,7 +96,7 @@ void main() {
         theme: buildDarkAppTheme(),
         home: Scaffold(
           body: ScheduleTab(
-            controller: controller,
+            controller: controller!,
             authService: auth,
             roleController: roleController,
           ),
@@ -324,5 +328,64 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Not signed in'), findsOneWidget);
+  });
+
+  testWidgets('cancelling a delete keeps the shift and records no delete', (
+    tester,
+  ) async {
+    await pumpTab(
+      tester,
+      shifts: [_shift('a', label: 'Qual block', startMatch: 18, endMatch: 34)],
+    );
+
+    await tester.tap(find.text('Qual block'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.delete_outline_rounded));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(sync.deletes, isEmpty);
+    expect(controller!.items.single.id, 'a');
+  });
+
+  testWidgets('a confirmed delete records the shift id and closes the editor', (
+    tester,
+  ) async {
+    await pumpTab(
+      tester,
+      shifts: [_shift('a', label: 'Qual block', startMatch: 18, endMatch: 34)],
+    );
+
+    await tester.tap(find.text('Qual block'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.delete_outline_rounded));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    await tester.pumpAndSettle();
+
+    expect(sync.deletes, ['a']);
+    expect(controller!.items, isEmpty);
+    expect(find.text('Edit shift'), findsNothing);
+  });
+
+  testWidgets('a failed delete keeps the editor sheet open', (tester) async {
+    await pumpTab(
+      tester,
+      shifts: [_shift('a', label: 'Qual block', startMatch: 18, endMatch: 34)],
+    );
+    sync.failWith = Exception('offline');
+
+    await tester.tap(find.text('Qual block'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.delete_outline_rounded));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    await tester.pumpAndSettle();
+
+    // The write failed, so the sheet stays open and the shift is untouched.
+    expect(find.text('Edit shift'), findsOneWidget);
+    expect(controller!.items.single.id, 'a');
   });
 }

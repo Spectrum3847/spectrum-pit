@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "Spectrum 3847" "\0"
-            VALUE "FileDescription", "spectrumpit" "\0"
+            VALUE "FileDescription", "Spectrum Pit" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "spectrumpit" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 Spectrum 3847. All rights reserved." "\0"
             VALUE "OriginalFilename", "spectrumpit.exe" "\0"
-            VALUE "ProductName", "spectrumpit" "\0"
+            VALUE "ProductName", "Spectrum Pit" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

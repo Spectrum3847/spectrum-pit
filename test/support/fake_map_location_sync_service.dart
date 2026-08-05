@@ -29,6 +29,10 @@ class FakeMapLocationSyncService implements MapLocationSyncService {
   /// Push a snapshot to simulate a realtime emission (used in tests).
   void emit(List<MapLocation> items) => _controller.add(items);
 
+  /// Publish a stream error, like the real backend does on a permission-denied
+  /// read.
+  void emitError(Object error) => _controller.addError(error);
+
   @override
   Future<List<MapLocation>> fetchAll() async => _items.values.toList();
 

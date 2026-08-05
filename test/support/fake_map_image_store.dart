@@ -20,10 +20,14 @@ class FakeMapImageStore implements MapImageStore {
   bool isSupported = true;
 
   @override
-  Future<MapDiagram?> diagramFor(MapType mapType) async => images[mapType];
+  Future<MapDiagram?> diagramFor(MapType mapType) async {
+    if (!isSupported) return null;
+    return images[mapType];
+  }
 
   @override
   Future<MapDiagram?> pickDiagram(MapType mapType) async {
+    if (!isSupported) return null;
     final diagram = nextPick;
     if (diagram != null) images[mapType] = diagram;
     return diagram;
@@ -31,6 +35,7 @@ class FakeMapImageStore implements MapImageStore {
 
   @override
   Future<void> clearDiagram(MapType mapType) async {
+    if (!isSupported) return;
     if (clearFailure != null) throw clearFailure!;
     final gate = clearGate;
     if (gate != null) await gate;

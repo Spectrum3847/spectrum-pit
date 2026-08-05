@@ -55,7 +55,7 @@ void main() {
       expect(PitPalette.accentOf(context), PitPalette.violetDeep);
     });
 
-    testWidgets('dark theme wires the Shadow Board tokens', (tester) async {
+    test('dark theme wires the Shadow Board tokens', () {
       final theme = buildDarkAppTheme();
       expect(theme.colorScheme.primary, PitPalette.violetCore);
       expect(theme.scaffoldBackgroundColor, PitPalette.caseBlack);
@@ -66,83 +66,166 @@ void main() {
   });
 
   // Guards for the drawn-depth and one-violet rules that a token swap could
-  // silently regress (each of these caught a real gap in review).
+  // silently regress (each of these caught a real gap in review). Pure theme
+  // assertions run over both theme builders.
   group('Shadow Board token guards', () {
-    testWidgets(
-      'sheets and dialogs draw Surface Strong plus the outline border',
-      (tester) async {
-        final dark = buildDarkAppTheme();
-        expect(
-          dark.bottomSheetTheme.backgroundColor,
-          PitPalette.caseSurfaceStrong,
-        );
-        expect(dark.dialogTheme.backgroundColor, PitPalette.caseSurfaceStrong);
-        final sheetShape =
-            dark.bottomSheetTheme.shape as RoundedRectangleBorder;
-        expect(sheetShape.side.color, PitPalette.outline);
-        expect(dark.bottomSheetTheme.elevation, 0);
-
-        final light = buildAppTheme();
-        expect(
-          light.bottomSheetTheme.backgroundColor,
-          PitPalette.lightSurfaceStrong,
-        );
-        final lightSheetShape =
-            light.bottomSheetTheme.shape as RoundedRectangleBorder;
-        expect(lightSheetShape.side.color, PitPalette.lightOutline);
-      },
-    );
-
-    testWidgets('secondary buttons carry Ink labels, not the violet accent', (
-      tester,
-    ) async {
-      final theme = buildDarkAppTheme();
-      final outlined = theme.outlinedButtonTheme.style!.foregroundColor!
-          .resolve(<WidgetState>{});
-      final text = theme.textButtonTheme.style!.foregroundColor!.resolve(
-        <WidgetState>{},
+    test('sheets and dialogs draw Surface Strong plus the outline border', () {
+      final dark = buildDarkAppTheme();
+      expect(
+        dark.bottomSheetTheme.backgroundColor,
+        PitPalette.caseSurfaceStrong,
       );
-      expect(outlined, PitPalette.ink);
-      expect(text, PitPalette.ink);
-      expect(outlined, isNot(PitPalette.violetCore));
+      expect(dark.dialogTheme.backgroundColor, PitPalette.caseSurfaceStrong);
+      final sheetShape = dark.bottomSheetTheme.shape as RoundedRectangleBorder;
+      expect(sheetShape.side.color, PitPalette.outline);
+      expect(dark.bottomSheetTheme.elevation, 0);
+
+      final light = buildAppTheme();
+      expect(
+        light.bottomSheetTheme.backgroundColor,
+        PitPalette.lightSurfaceStrong,
+      );
+      final lightSheetShape =
+          light.bottomSheetTheme.shape as RoundedRectangleBorder;
+      expect(lightSheetShape.side.color, PitPalette.lightOutline);
     });
 
-    testWidgets('buttons are at least 48 tall', (tester) async {
-      final theme = buildDarkAppTheme();
-      final size = theme.filledButtonTheme.style!.minimumSize!.resolve(
-        <WidgetState>{},
-      );
-      expect(size!.height, 48);
-    });
-
-    testWidgets('type scale is capped at the 18px ceiling', (tester) async {
-      final t = buildDarkAppTheme().textTheme;
-      for (final style in <TextStyle?>[
-        t.displayLarge,
-        t.displayMedium,
-        t.displaySmall,
-        t.headlineLarge,
-        t.headlineMedium,
-        t.headlineSmall,
-        t.titleLarge,
+    test('secondary buttons carry Ink labels, not the violet accent', () {
+      for (final (theme, ink) in [
+        (buildDarkAppTheme(), PitPalette.ink),
+        (buildAppTheme(), PitPalette.lightInk),
       ]) {
-        expect(style!.fontSize, lessThanOrEqualTo(18));
+        final outlined = theme.outlinedButtonTheme.style!.foregroundColor!
+            .resolve(<WidgetState>{});
+        final text = theme.textButtonTheme.style!.foregroundColor!.resolve(
+          <WidgetState>{},
+        );
+        expect(outlined, ink);
+        expect(text, ink);
+        expect(outlined, isNot(PitPalette.violetCore));
       }
     });
 
-    testWidgets('input focus is a 2px violet border', (tester) async {
-      final theme = buildDarkAppTheme();
-      final focused =
-          theme.inputDecorationTheme.focusedBorder as OutlineInputBorder;
-      expect(focused.borderSide.width, 2);
-      expect(focused.borderSide.color, PitPalette.violetCore);
+    test('buttons are at least 48 tall', () {
+      for (final theme in [buildDarkAppTheme(), buildAppTheme()]) {
+        final size = theme.filledButtonTheme.style!.minimumSize!.resolve(
+          <WidgetState>{},
+        );
+        expect(size!.height, 48);
+      }
     });
 
-    testWidgets('no Material surface tint leaks through the color scheme', (
-      tester,
-    ) async {
+    test('type scale is capped at the 18px ceiling', () {
+      for (final theme in [buildDarkAppTheme(), buildAppTheme()]) {
+        final t = theme.textTheme;
+        for (final style in <TextStyle?>[
+          t.displayLarge,
+          t.displayMedium,
+          t.displaySmall,
+          t.headlineLarge,
+          t.headlineMedium,
+          t.headlineSmall,
+          t.titleLarge,
+        ]) {
+          expect(style!.fontSize, lessThanOrEqualTo(18));
+        }
+      }
+    });
+
+    test('input focus is a 2px violet border', () {
+      for (final (theme, accent) in [
+        (buildDarkAppTheme(), PitPalette.violetCore),
+        (buildAppTheme(), PitPalette.violetDeep),
+      ]) {
+        final focused =
+            theme.inputDecorationTheme.focusedBorder as OutlineInputBorder;
+        expect(focused.borderSide.width, 2);
+        expect(focused.borderSide.color, accent);
+      }
+    });
+
+    test('no Material surface tint leaks through the color scheme', () {
       expect(buildDarkAppTheme().colorScheme.surfaceTint, Colors.transparent);
       expect(buildAppTheme().colorScheme.surfaceTint, Colors.transparent);
+    });
+  });
+
+  // #169: the status accessors had no coverage in either brightness. They colour
+  // every shift chip and inventory badge, so a raw token leaking across themes
+  // shows up as an unreadable chip rather than as a crash.
+  group('status tokens resolve per brightness', () {
+    Future<BuildContext> pump(WidgetTester tester, ThemeData theme) async {
+      late BuildContext context;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: theme,
+          home: Builder(
+            builder: (c) {
+              context = c;
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      );
+      return context;
+    }
+
+    testWidgets('dark mode resolves the dark status tokens', (tester) async {
+      final context = await pump(tester, buildDarkAppTheme());
+
+      expect(PitPalette.statusPackingOf(context), PitPalette.statusPacking);
+      expect(PitPalette.statusStagingOf(context), PitPalette.statusStaging);
+      expect(PitPalette.statusLoadingOf(context), PitPalette.statusLoading);
+      expect(PitPalette.statusReadyOf(context), PitPalette.statusReady);
+      expect(PitPalette.statusOverdueOf(context), PitPalette.statusOverdue);
+    });
+
+    testWidgets('light mode resolves the light status tokens', (tester) async {
+      final context = await pump(tester, buildAppTheme());
+
+      expect(
+        PitPalette.statusPackingOf(context),
+        PitPalette.lightStatusPacking,
+      );
+      expect(
+        PitPalette.statusStagingOf(context),
+        PitPalette.lightStatusStaging,
+      );
+      expect(
+        PitPalette.statusLoadingOf(context),
+        PitPalette.lightStatusLoading,
+      );
+      expect(PitPalette.statusReadyOf(context), PitPalette.lightStatusReady);
+      expect(
+        PitPalette.statusOverdueOf(context),
+        PitPalette.lightStatusOverdue,
+      );
+    });
+
+    test('no status token is shared across the two themes', () {
+      // Compared as constants rather than through two pumps: reading them from
+      // captured BuildContexts across a theme swap resolved the wrong theme and
+      // made this pass or fail for reasons unrelated to the palette.
+      const dark = <Color>[
+        PitPalette.statusPacking,
+        PitPalette.statusStaging,
+        PitPalette.statusLoading,
+        PitPalette.statusReady,
+        PitPalette.statusOverdue,
+      ];
+      const light = <Color>[
+        PitPalette.lightStatusPacking,
+        PitPalette.lightStatusStaging,
+        PitPalette.lightStatusLoading,
+        PitPalette.lightStatusReady,
+        PitPalette.lightStatusOverdue,
+      ];
+
+      // A per-theme token that does not differ would make its accessor
+      // pointless.
+      for (var i = 0; i < dark.length; i++) {
+        expect(dark[i], isNot(light[i]), reason: 'index $i');
+      }
     });
   });
 }

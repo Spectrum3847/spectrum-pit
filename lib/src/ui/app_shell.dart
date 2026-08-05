@@ -1,6 +1,7 @@
 import 'dart:async' show unawaited;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../services/issue_report_service.dart';
 import '../services/map_image_store.dart';
@@ -15,6 +16,7 @@ import '../state/pit_shift_controller.dart';
 import '../state/theme_controller.dart';
 import '../state/user_role_controller.dart';
 import '../theme/pit_palette.dart';
+import '../models/user_role.dart';
 import 'borrow_tab.dart';
 import 'docs_viewer_screen.dart';
 import 'inventory_tab.dart';
@@ -59,7 +61,7 @@ class AppShell extends StatefulWidget {
   State<AppShell> createState() => _AppShellState();
 }
 
-const _kFirstSecondaryTab = 5;
+const _kFirstSecondaryTab = AppTabs.docs;
 
 const _kTabMeta = [
   (
@@ -137,6 +139,14 @@ class _AppShellState extends State<AppShell> {
     return i < 0 ? 0 : i;
   }
 
+  Object? _stepDestination(int delta) {
+    final count = _featureTabIndices.length;
+    if (count < 2) return null;
+    final next = (_navIndex + delta) % count;
+    _onNavSelected(next < 0 ? next + count : next);
+    return null;
+  }
+
   void _onNavSelected(int navIndex) {
     final fullIndex = _featureTabIndices[navIndex];
     if (fullIndex == _index) return;
@@ -209,6 +219,32 @@ class _AppShellState extends State<AppShell> {
           authService: widget.authService,
           issueReportService: widget.issueReportService,
           telemetryService: widget.telemetryService,
+        );
+    }
+  }
+
+  Widget _featureBody(int fullIndex) {
+    switch (fullIndex) {
+      case AppTabs.inventory:
+        return InventoryTab(controller: widget.inventoryController);
+      case AppTabs.packing:
+        return PackingTab(
+          controller: widget.packingController,
+          photoService: widget.photoService,
+        );
+      case AppTabs.borrowed:
+        return BorrowTab(controller: widget.borrowController);
+      case AppTabs.maps:
+        return MapsTab(
+          controller: widget.mapLocationController,
+          inventoryController: widget.inventoryController,
+          imageStore: widget.mapImageStore,
+        );
+      default:
+        return ScheduleTab(
+          controller: widget.pitShiftController,
+          authService: widget.authService,
+          roleController: widget.userRoleController,
         );
     }
   }
@@ -326,37 +362,55 @@ class _AppShellState extends State<AppShell> {
       );
     }
 
-    final tabs = <Widget>[
-      InventoryTab(controller: widget.inventoryController),
-      PackingTab(
-        controller: widget.packingController,
-        photoService: widget.photoService,
-      ),
-      BorrowTab(controller: widget.borrowController),
-      MapsTab(
-        controller: widget.mapLocationController,
-        inventoryController: widget.inventoryController,
-        imageStore: widget.mapImageStore,
-      ),
-      ScheduleTab(
-        controller: widget.pitShiftController,
-        authService: widget.authService,
-        roleController: widget.userRoleController,
-      ),
-    ];
+    final tabs = [for (final i in features) _featureBody(i)];
 
-    return Scaffold(
-      appBar: AppBar(
-        titleSpacing: 0,
-        title: _buildTitle(context),
-        actions: _buildAppBarActions(),
-      ),
-      body: IndexedStack(index: _index, children: tabs),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _navIndex,
-        onDestinationSelected: _onNavSelected,
-        destinations: _buildDestinations(),
+    return Shortcuts(
+      shortcuts: <ShortcutActivator, Intent>{
+        const SingleActivator(LogicalKeyboardKey.bracketRight, control: true):
+            const _NextDestinationIntent(),
+        const SingleActivator(LogicalKeyboardKey.bracketRight, meta: true):
+            const _NextDestinationIntent(),
+        const SingleActivator(LogicalKeyboardKey.bracketLeft, control: true):
+            const _PreviousDestinationIntent(),
+        const SingleActivator(LogicalKeyboardKey.bracketLeft, meta: true):
+            const _PreviousDestinationIntent(),
+      },
+      child: Actions(
+        actions: <Type, Action<Intent>>{
+          _NextDestinationIntent: CallbackAction<_NextDestinationIntent>(
+            onInvoke: (_) => _stepDestination(1),
+          ),
+          _PreviousDestinationIntent:
+              CallbackAction<_PreviousDestinationIntent>(
+                onInvoke: (_) => _stepDestination(-1),
+              ),
+        },
+
+        child: Focus(
+          autofocus: true,
+          child: Scaffold(
+            appBar: AppBar(
+              titleSpacing: 0,
+              title: _buildTitle(context),
+              actions: _buildAppBarActions(),
+            ),
+            body: IndexedStack(index: _navIndex, children: tabs),
+            bottomNavigationBar: NavigationBar(
+              selectedIndex: _navIndex,
+              onDestinationSelected: _onNavSelected,
+              destinations: _buildDestinations(),
+            ),
+          ),
+        ),
       ),
     );
   }
+}
+
+class _NextDestinationIntent extends Intent {
+  const _NextDestinationIntent();
+}
+
+class _PreviousDestinationIntent extends Intent {
+  const _PreviousDestinationIntent();
 }

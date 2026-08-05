@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 
 import '../models/borrow_record.dart';
 import '../state/borrow_controller.dart';
@@ -177,9 +178,7 @@ class _BorrowRow extends StatelessWidget {
               borderRadius: BorderRadius.circular(PitPalette.radiusSm),
               border: Border.all(
                 color: overdue
-                    ? (Theme.of(context).brightness == Brightness.dark
-                          ? PitPalette.statusOverdue
-                          : PitPalette.lightStatusOverdue)
+                    ? PitPalette.statusOverdueOf(context)
                     : PitPalette.outlineOf(context),
               ),
             ),
@@ -359,9 +358,7 @@ class _TimestampLabel extends StatelessWidget {
 class _ReturnedChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    final color = Theme.of(context).brightness == Brightness.dark
-        ? PitPalette.statusReady
-        : PitPalette.lightStatusReady;
+    final color = PitPalette.statusReadyOf(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -391,9 +388,7 @@ class _OverdueChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = Theme.of(context).brightness == Brightness.dark
-        ? PitPalette.statusOverdue
-        : PitPalette.lightStatusOverdue;
+    final color = PitPalette.statusOverdueOf(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -502,10 +497,11 @@ class _DashedRectPainter extends CustomPainter {
 }
 
 String _shortDateTime(DateTime dt) {
-  final m = dt.month.toString().padLeft(2, '0');
-  final d = dt.day.toString().padLeft(2, '0');
-  final h = dt.hour.toString().padLeft(2, '0');
-  final min = dt.minute.toString().padLeft(2, '0');
+  final local = dt.toLocal();
+  final m = local.month.toString().padLeft(2, '0');
+  final d = local.day.toString().padLeft(2, '0');
+  final h = local.hour.toString().padLeft(2, '0');
+  final min = local.minute.toString().padLeft(2, '0');
   return '$m/$d $h:$min';
 }
 
@@ -562,7 +558,7 @@ class _BorrowEditorSheetState extends State<_BorrowEditorSheet> {
     final existing = widget.record;
     widget.onSubmit(
       BorrowRecord(
-        id: existing?.id ?? 'borrow_${DateTime.now().microsecondsSinceEpoch}',
+        id: existing?.id ?? const Uuid().v4(),
         itemId: existing?.itemId,
         toolName: toolName,
         teamName: _teamName.text.trim(),
@@ -579,45 +575,66 @@ class _BorrowEditorSheetState extends State<_BorrowEditorSheet> {
 
   Future<void> _pickCheckoutDate() async {
     final now = DateTime.now();
+    final firstDate = DateTime(now.year - 1);
+    final lastDate = DateTime(now.year + 1);
+
+    final checkedOutLocal = _checkedOutAt.toLocal();
+    final clamped = checkedOutLocal.isBefore(firstDate)
+        ? firstDate
+        : checkedOutLocal.isAfter(lastDate)
+        ? lastDate
+        : checkedOutLocal;
     final date = await showDatePicker(
       context: context,
-      initialDate: _checkedOutAt,
-      firstDate: DateTime(now.year - 1),
-      lastDate: DateTime(now.year + 1),
+      initialDate: clamped,
+      firstDate: firstDate,
+      lastDate: lastDate,
     );
     if (date == null) return;
     if (!mounted) return;
     final time = await showTimePicker(
       context: context,
-      initialTime: TimeOfDay.fromDateTime(_checkedOutAt),
+      initialTime: TimeOfDay.fromDateTime(checkedOutLocal),
     );
+
+    if (!mounted) return;
     setState(() {
       _checkedOutAt = DateTime(
         date.year,
         date.month,
         date.day,
-        time?.hour ?? _checkedOutAt.hour,
-        time?.minute ?? _checkedOutAt.minute,
+        time?.hour ?? checkedOutLocal.hour,
+        time?.minute ?? checkedOutLocal.minute,
       ).toUtc();
     });
   }
 
   Future<void> _pickEstimatedReturn() async {
     final now = DateTime.now();
+    final firstDate = now;
+    final lastDate = DateTime(now.year + 1);
+
+    final initial = (_estimatedReturn ?? now.add(const Duration(days: 1)))
+        .toLocal();
+    final clamped = initial.isBefore(firstDate)
+        ? firstDate
+        : initial.isAfter(lastDate)
+        ? lastDate
+        : initial;
     final date = await showDatePicker(
       context: context,
-      initialDate: _estimatedReturn ?? now.add(const Duration(days: 1)),
-      firstDate: now,
-      lastDate: DateTime(now.year + 1),
+      initialDate: clamped,
+      firstDate: firstDate,
+      lastDate: lastDate,
     );
     if (date == null) return;
     if (!mounted) return;
+    final base = _estimatedReturn ?? now.add(const Duration(hours: 2));
     final time = await showTimePicker(
       context: context,
-      initialTime: TimeOfDay.fromDateTime(
-        _estimatedReturn ?? now.add(const Duration(hours: 2)),
-      ),
+      initialTime: TimeOfDay.fromDateTime(base.toLocal()),
     );
+    if (!mounted) return;
     setState(() {
       _estimatedReturn = DateTime(
         date.year,

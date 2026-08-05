@@ -55,13 +55,12 @@ android {
         release {
             // Release builds use the keystore declared in android/key.properties
             // (gitignored). When that file is absent (e.g. CI without secrets
-            // wired up), fall back to the debug keystore so the build still
-            // produces an installable APK -- the artifact just won't match the
-            // release SHA-1 registered in Firebase.
-            signingConfig = if (hasReleaseSigning) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
+            // wired up), leave the build unsigned rather than falling back to
+            // the debug keystore, so a signed release artifact is never
+            // mistaken for a real release. CI that needs an installable APK
+            // builds the debug variant instead.
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
             }
         }
     }

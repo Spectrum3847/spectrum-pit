@@ -1,14 +1,13 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:spectrumpit/src/models/map_location.dart';
-import 'package:spectrumpit/src/services/map_location_sync_service.dart';
 import 'package:spectrumpit/src/services/spectrum_auth_service.dart';
 import 'package:spectrumpit/src/state/map_location_controller.dart';
 
+import 'support/fake_map_location_sync_service.dart';
 import 'support/fake_spectrum_auth_service.dart';
 
 MapLocation _loc(
@@ -43,7 +42,7 @@ void main() {
     });
     final controller = MapLocationController(
       authService: FakeSpectrumAuthService(),
-      syncService: _FakeSyncService(),
+      syncService: FakeMapLocationSyncService(),
     );
 
     await controller.bootstrap();
@@ -54,7 +53,7 @@ void main() {
   });
 
   test('signed-in stream emission replaces items', () async {
-    final sync = _FakeSyncService();
+    final sync = FakeMapLocationSyncService();
     final controller = MapLocationController(
       authService: FakeSpectrumAuthService(initialUser: _signedInUser),
       syncService: sync,
@@ -69,7 +68,7 @@ void main() {
   });
 
   test('upsert adds optimistically and persists', () async {
-    final sync = _FakeSyncService();
+    final sync = FakeMapLocationSyncService();
     final controller = MapLocationController(
       authService: FakeSpectrumAuthService(),
       syncService: sync,
@@ -84,7 +83,7 @@ void main() {
   });
 
   test('delete removes optimistically', () async {
-    final sync = _FakeSyncService();
+    final sync = FakeMapLocationSyncService();
     final controller = MapLocationController(
       authService: FakeSpectrumAuthService(),
       syncService: sync,
@@ -101,7 +100,7 @@ void main() {
   });
 
   test('locationsForMap filters by map type', () async {
-    final sync = _FakeSyncService();
+    final sync = FakeMapLocationSyncService();
     final controller = MapLocationController(
       authService: FakeSpectrumAuthService(),
       syncService: sync,
@@ -120,7 +119,7 @@ void main() {
     'stale-stream guard: emit after sign-out does not change items',
     () async {
       final auth = FakeSpectrumAuthService(initialUser: _signedInUser);
-      final sync = _FakeSyncService();
+      final sync = FakeMapLocationSyncService();
       final controller = MapLocationController(
         authService: auth,
         syncService: sync,
@@ -143,7 +142,7 @@ void main() {
   );
 
   test('bootstrap is idempotent', () async {
-    final sync = _FakeSyncService();
+    final sync = FakeMapLocationSyncService();
     final controller = MapLocationController(
       authService: FakeSpectrumAuthService(initialUser: _signedInUser),
       syncService: sync,
@@ -158,7 +157,7 @@ void main() {
   });
 
   test('a stream error keeps the last items and does not crash', () async {
-    final sync = _FakeSyncService();
+    final sync = FakeMapLocationSyncService();
     final controller = MapLocationController(
       authService: FakeSpectrumAuthService(initialUser: _signedInUser),
       syncService: sync,
@@ -192,7 +191,7 @@ void main() {
   });
 
   test('disposing while bootstrap is in flight does not throw', () async {
-    final sync = _FakeSyncService();
+    final sync = FakeMapLocationSyncService();
     final controller = MapLocationController(
       authService: FakeSpectrumAuthService(initialUser: _signedInUser),
       syncService: sync,
@@ -204,34 +203,4 @@ void main() {
 
     await expectLater(booting, completes);
   });
-}
-
-class _FakeSyncService implements MapLocationSyncService {
-  final Map<String, MapLocation> _items = {};
-  final _controller = StreamController<List<MapLocation>>.broadcast();
-
-  final List<MapLocation> upserts = [];
-  final List<String> deletes = [];
-
-  void emit(List<MapLocation> items) => _controller.add(items);
-
-  void emitError(Object error) => _controller.addError(error);
-
-  @override
-  Future<List<MapLocation>> fetchAll() async => _items.values.toList();
-
-  @override
-  Future<void> upsert(MapLocation location) async {
-    upserts.add(location);
-    _items[location.id] = location;
-  }
-
-  @override
-  Future<void> delete(String id) async {
-    deletes.add(id);
-    _items.remove(id);
-  }
-
-  @override
-  Stream<List<MapLocation>> streamAll() => _controller.stream;
 }

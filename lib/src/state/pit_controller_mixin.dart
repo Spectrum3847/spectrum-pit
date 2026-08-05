@@ -28,34 +28,77 @@ mixin PitControllerMixin<T extends PitModel> on ChangeNotifier {
 
   int _pitStreamGeneration = 0;
 
+  Future<void> _pitCacheSaveChain = Future<void>.value();
+
   List<T> _pitItems = <T>[];
 
   List<T> get items => List.unmodifiable(_pitItems);
 
   Future<void> bootstrap() {
-    _pitBootstrapFuture ??= _pitDoBootstrap();
-    return _pitBootstrapFuture!;
+    return _pitBootstrapFuture ??= _pitDoBootstrap().onError<Object>((
+      error,
+      stackTrace,
+    ) {
+      _pitBootstrapFuture = null;
+      Error.throwWithStackTrace(error, stackTrace);
+    });
   }
 
   Future<void> upsert(T item) async {
+    final previousIndex = _pitItems.indexWhere((e) => e.id == item.id);
+    final previousItem = previousIndex < 0 ? null : _pitItems[previousIndex];
     _pitItems = [
       for (final existing in _pitItems)
         if (existing.id != item.id) existing,
       item,
     ];
     notifyListeners();
-    await _pitSaveCache();
-    await pitUpsertRemote(item);
+    try {
+      await pitUpsertRemote(item);
+    } catch (_) {
+      final restored = [
+        for (final existing in _pitItems)
+          if (existing.id != item.id) existing,
+      ];
+      if (previousItem != null) {
+        restored.insert(previousIndex.clamp(0, restored.length), previousItem);
+      }
+      _pitItems = restored;
+      notifyListeners();
+
+      await _pitSaveCache().catchError((_) {});
+      rethrow;
+    }
+
+    await _pitSaveCache().catchError((_) {});
   }
 
   Future<void> delete(String id) async {
+    final previousIndex = _pitItems.indexWhere((e) => e.id == id);
+    final previousItem = previousIndex < 0 ? null : _pitItems[previousIndex];
     _pitItems = [
       for (final existing in _pitItems)
         if (existing.id != id) existing,
     ];
     notifyListeners();
-    await _pitSaveCache();
-    await pitDeleteRemote(id);
+    try {
+      await pitDeleteRemote(id);
+    } catch (_) {
+      if (previousItem != null) {
+        final restored = [
+          for (final existing in _pitItems)
+            if (existing.id != id) existing,
+        ];
+        restored.insert(previousIndex.clamp(0, restored.length), previousItem);
+        _pitItems = restored;
+      }
+      notifyListeners();
+
+      await _pitSaveCache().catchError((_) {});
+      rethrow;
+    }
+
+    await _pitSaveCache().catchError((_) {});
   }
 
   void pitDispose() {
@@ -119,11 +162,16 @@ mixin PitControllerMixin<T extends PitModel> on ChangeNotifier {
     }
   }
 
-  Future<void> _pitSaveCache() async {
-    final prefs = await SharedPreferences.getInstance();
+  Future<void> _pitSaveCache() {
     final encoded = jsonEncode([
       for (final item in _pitItems) {...item.toJson(), 'id': item.id},
     ]);
-    await prefs.setString(pitCacheKey, encoded);
+    final write = _pitCacheSaveChain.then((_) async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(pitCacheKey, encoded);
+    });
+
+    _pitCacheSaveChain = write.catchError((_) {});
+    return write;
   }
 }

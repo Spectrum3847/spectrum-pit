@@ -84,11 +84,6 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
 
-  tearDown(() {
-    mapController.dispose();
-    inventoryController.dispose();
-  });
-
   Future<void> pumpTab(
     WidgetTester tester, {
     List<MapLocation> pins = const <MapLocation>[],
@@ -108,6 +103,9 @@ void main() {
       authService: auth,
       syncService: inventorySync,
     );
+    // Cleanup runs only when the controller was actually constructed.
+    addTearDown(mapController.dispose);
+    addTearDown(inventoryController.dispose);
     await mapController.bootstrap();
     await inventoryController.bootstrap();
     if (pins.isNotEmpty) mapSync.emit(pins);
@@ -344,10 +342,16 @@ void main() {
     await tester.tap(find.text('Pit'));
     await tester.pumpAndSettle();
     expect(find.text('No pit diagram set'), findsNothing);
+    // Store-level: the pending lab removal has not been applied yet.
+    expect(imageStore.images[MapType.lab], isNotNull);
 
     gate.complete();
     await tester.pumpAndSettle();
 
     expect(find.text('No pit diagram set'), findsNothing);
+    // The lab removal applied once the gate settled; the pit diagram is
+    // untouched by a removal that was started for the lab map.
+    expect(imageStore.images[MapType.lab], isNull);
+    expect(imageStore.images[MapType.pit], isNotNull);
   });
 }

@@ -19,7 +19,7 @@ class FakeMapDiagramSyncService implements MapDiagramSyncService {
        _writeFailure = writeFailure,
        _clearFailure = clearFailure;
 
-  final String? _readKeyValue;
+  String? _readKeyValue;
   final Object? _readFailure;
   final Object? _writeFailure;
   final Object? _clearFailure;
@@ -46,11 +46,19 @@ class FakeMapDiagramSyncService implements MapDiagramSyncService {
     await onWriteKey?.call(mapType, key);
     writeCalls.add((mapType: mapType, key: key));
     if (_writeFailure != null) throw _writeFailure;
+    // Store the pointer, so a later readKey reflects the write. clearKey
+    // already did the mirror of this; without it the fake reported a stale key
+    // after a successful write and no test could catch a read-after-write
+    // mistake (#169). A failed write deliberately does not update it.
+    _readKeyValue = key;
   }
 
   @override
   Future<void> clearKey(MapType mapType) async {
     clearCalls.add(mapType);
     if (_clearFailure != null) throw _clearFailure;
+    // Clear the stored pointer so a later readKey reflects the cleared state,
+    // rather than leaving diagramFor to discover a deleted object by 404.
+    _readKeyValue = null;
   }
 }

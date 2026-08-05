@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 
 import '../models/packing_record.dart';
 import '../services/photo_service.dart';
@@ -97,7 +98,11 @@ class _PackingTabState extends State<PackingTab> {
     } finally {
       if (mounted) setState(() => _busy.remove(record.id));
     }
-    if (key == null || !mounted) return;
+    if (key == null) return;
+    if (!mounted) {
+      await _deleteKey(key, record.itemId);
+      return;
+    }
 
     final current = _current(record);
     try {
@@ -106,6 +111,7 @@ class _PackingTabState extends State<PackingTab> {
       );
     } catch (error) {
       _showFailure('save the photo for "${current.itemId}"', error);
+      await _deleteKey(key, current.itemId);
       return;
     }
     final previous = current.photoRef;
@@ -137,12 +143,7 @@ class _PackingTabState extends State<PackingTab> {
     if (key == null) return;
     try {
       await widget.controller.upsert(
-        PackingRecord(
-          id: record.id,
-          itemId: record.itemId,
-          packingStatus: record.packingStatus,
-          updatedAt: DateTime.now().toUtc(),
-        ),
+        record.copyWith(clearPhotoRef: true, updatedAt: DateTime.now().toUtc()),
       );
     } catch (error) {
       _showFailure('remove the photo from "${record.itemId}"', error);
@@ -176,14 +177,14 @@ class _PackingTabState extends State<PackingTab> {
       builder: (sheetContext) => _RecordEditorSheet(
         record: record,
         photoService: widget.photoService,
-        onSubmit: (result) {
-          widget.controller
-              .upsert(result)
-              .catchError(
-                (Object error) =>
-                    _showFailure('save "${result.itemId}"', error),
-              );
-          Navigator.of(sheetContext).pop();
+        onSubmit: (result) async {
+          try {
+            await widget.controller.upsert(result);
+            return true;
+          } catch (error) {
+            _showFailure('save "${result.itemId}"', error);
+            return false;
+          }
         },
         onDelete: record == null
             ? null
@@ -193,15 +194,17 @@ class _PackingTabState extends State<PackingTab> {
                   record.itemId,
                 );
                 if (!confirmed) return;
-                await widget.controller
-                    .delete(record.id)
-                    .catchError(
-                      (Object error) =>
-                          _showFailure('delete "${record.itemId}"', error),
-                    );
+                var deleted = false;
 
-                final photoRef = record.photoRef;
-                if (photoRef != null) {
+                final photoRef = _current(record).photoRef;
+                try {
+                  await widget.controller.delete(record.id);
+                  deleted = true;
+                } catch (error) {
+                  _showFailure('delete "${record.itemId}"', error);
+                }
+
+                if (deleted && photoRef != null) {
                   await _deleteKey(photoRef, record.itemId);
                 }
                 if (sheetContext.mounted) Navigator.of(sheetContext).pop();
@@ -259,16 +262,11 @@ IconData _statusIcon(PackingStatus status) => switch (status) {
 };
 
 Color _statusColor(BuildContext context, PackingStatus status) {
-  final dark = Theme.of(context).brightness == Brightness.dark;
   return switch (status) {
-    PackingStatus.packing =>
-      dark ? PitPalette.statusPacking : PitPalette.lightStatusPacking,
-    PackingStatus.staging =>
-      dark ? PitPalette.statusStaging : PitPalette.lightStatusStaging,
-    PackingStatus.loading =>
-      dark ? PitPalette.statusLoading : PitPalette.lightStatusLoading,
-    PackingStatus.ready =>
-      dark ? PitPalette.statusReady : PitPalette.lightStatusReady,
+    PackingStatus.packing => PitPalette.statusPackingOf(context),
+    PackingStatus.staging => PitPalette.statusStagingOf(context),
+    PackingStatus.loading => PitPalette.statusLoadingOf(context),
+    PackingStatus.ready => PitPalette.statusReadyOf(context),
   };
 }
 
@@ -345,37 +343,41 @@ class _StatusChip extends StatelessWidget {
     final color = _statusColor(context, status);
     final fg = color;
     final bg = color.withValues(alpha: 0.2);
-    return Material(
-      color: bg,
-      borderRadius: BorderRadius.circular(PitPalette.radiusSm),
-      child: InkWell(
-        onTap: onTap,
+
+    return Tooltip(
+      message: '${_statusLabel(status)}. Tap to advance the packing stage.',
+      child: Material(
+        color: bg,
         borderRadius: BorderRadius.circular(PitPalette.radiusSm),
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 40),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(PitPalette.radiusSm),
-            border: Border.all(color: color),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(_statusIcon(status), size: 16, color: fg),
-              const SizedBox(width: 6),
-              Flexible(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    _statusLabel(status),
-                    softWrap: false,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.labelLarge?.copyWith(color: fg),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(PitPalette.radiusSm),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 40),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(PitPalette.radiusSm),
+              border: Border.all(color: color),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(_statusIcon(status), size: 16, color: fg),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      _statusLabel(status),
+                      softWrap: false,
+                      style: Theme.of(
+                        context,
+                      ).textTheme.labelLarge?.copyWith(color: fg),
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -534,9 +536,7 @@ class _PhotoSlotState extends State<_PhotoSlot> {
         Icon(
           Icons.error_outline_rounded,
           size: glyph,
-          color: Theme.of(context).brightness == Brightness.dark
-              ? PitPalette.statusOverdue
-              : PitPalette.lightStatusOverdue,
+          color: PitPalette.statusOverdueOf(context),
         ),
         'Photo did not load. Tap to try again.',
       );
@@ -738,7 +738,8 @@ class _RecordEditorSheet extends StatefulWidget {
 
   final PackingRecord? record;
   final PhotoService photoService;
-  final ValueChanged<PackingRecord> onSubmit;
+
+  final Future<bool> Function(PackingRecord record) onSubmit;
   final Future<void> Function()? onDelete;
 
   @override
@@ -753,7 +754,13 @@ class _RecordEditorSheetState extends State<_RecordEditorSheet> {
 
   String? _photoRef;
 
-  bool _photoIsCaptured = false;
+  late final String? _originalPhotoRef;
+
+  final List<String> _capturedKeys = <String>[];
+
+  bool _saved = false;
+
+  bool _saving = false;
   bool _busy = false;
 
   @override
@@ -763,11 +770,18 @@ class _RecordEditorSheetState extends State<_RecordEditorSheet> {
     _itemId = TextEditingController(text: record?.itemId ?? '');
     _status = record?.packingStatus ?? PackingStatus.packing;
     _photoRef = record?.photoRef;
+    _originalPhotoRef = record?.photoRef;
   }
 
   @override
   void dispose() {
     _itemId.dispose();
+
+    if (!_saved && !_saving) {
+      for (final key in _capturedKeys) {
+        widget.photoService.delete(key).catchError((_) {});
+      }
+    }
     super.dispose();
   }
 
@@ -787,20 +801,17 @@ class _RecordEditorSheetState extends State<_RecordEditorSheet> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
-    if (key == null || !mounted) return;
-    final previous = _photoRef;
-    final previousWasCaptured = _photoIsCaptured;
-    setState(() {
-      _photoRef = key;
-      _photoIsCaptured = true;
-    });
-    if (previousWasCaptured && previous != null) {
-      try {
-        await widget.photoService.delete(previous);
-      } catch (error) {
-        _showFailure('delete the previous photo', error);
-      }
+    if (key == null) return;
+    if (!mounted) {
+      await widget.photoService.delete(key).catchError((_) {});
+      return;
     }
+
+    final captured = key;
+    setState(() {
+      _photoRef = captured;
+      _capturedKeys.add(captured);
+    });
   }
 
   void _showFailure(String action, Object error) {
@@ -810,19 +821,44 @@ class _RecordEditorSheetState extends State<_RecordEditorSheet> {
     ).showSnackBar(SnackBar(content: Text('Could not $action: $error')));
   }
 
-  void _save() {
+  Future<void> _save() async {
     final itemId = _itemId.text.trim();
     if (itemId.isEmpty) return;
+    if (_saving) return;
+    setState(() => _saving = true);
     final existing = widget.record;
-    widget.onSubmit(
-      PackingRecord(
-        id: existing?.id ?? 'pack_${DateTime.now().microsecondsSinceEpoch}',
-        itemId: itemId,
-        packingStatus: _status,
-        photoRef: _photoRef,
-        updatedAt: DateTime.now().toUtc(),
-      ),
-    );
+    bool committed;
+    try {
+      committed = await widget.onSubmit(
+        PackingRecord(
+          id: existing?.id ?? const Uuid().v4(),
+          itemId: itemId,
+          packingStatus: _status,
+          photoRef: _photoRef,
+          updatedAt: DateTime.now().toUtc(),
+        ),
+      );
+    } finally {
+      _saving = false;
+    }
+    if (!mounted || !committed) return;
+    _saved = true;
+
+    final claimed = _photoRef;
+    for (final key in _capturedKeys) {
+      if (key != claimed) {
+        try {
+          await widget.photoService.delete(key);
+        } catch (_) {}
+      }
+    }
+    final original = _originalPhotoRef;
+    if (original != null && original != claimed) {
+      try {
+        await widget.photoService.delete(original);
+      } catch (_) {}
+    }
+    if (mounted) Navigator.of(context).pop();
   }
 
   @override

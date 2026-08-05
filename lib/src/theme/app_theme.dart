@@ -79,6 +79,8 @@ ThemeData _themeFrom({
   required Color onError,
 }) {
   final isDark = brightness == Brightness.dark;
+
+  GoogleFonts.config.allowRuntimeFetching = false;
   final base = isDark
       ? ThemeData.dark(useMaterial3: true)
       : ThemeData.light(useMaterial3: true);

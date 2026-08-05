@@ -41,7 +41,7 @@ MockClient _firebaseBackend({int refreshStatus = 200}) {
 }
 
 DesktopAuthService _service({int refreshStatus = 200}) {
-  return DesktopAuthService(
+  final service = DesktopAuthService(
     clientId: 'client-123',
     firebaseApiKey: 'fake-key',
     session: fc.FirebaseAuthSession(
@@ -50,6 +50,8 @@ DesktopAuthService _service({int refreshStatus = 200}) {
     ),
     signInFlow: () async => const fc.GoogleTokens(idToken: 'google-id-token'),
   );
+  addTearDown(service.dispose);
+  return service;
 }
 
 void main() {
@@ -66,6 +68,29 @@ void main() {
     expect(service.currentUser?.displayName, 'Dana Scout');
     expect(await service.idToken(), 'fb-token-1');
   });
+
+  test(
+    'snapshotStream emits signingIn then signedIn on a successful sign-in',
+    () async {
+      final service = _service();
+      final states = <SpectrumAuthState>[];
+      final sub = service.snapshotStream.listen((s) => states.add(s.state));
+      addTearDown(sub.cancel);
+
+      await service.signIn();
+      // The broadcast stream delivers asynchronously; flush the queue so the
+      // signedIn emission has reached the listener before asserting.
+      await Future<void>.delayed(Duration.zero);
+
+      expect(
+        states,
+        containsAllInOrder(<SpectrumAuthState>[
+          SpectrumAuthState.signingIn,
+          SpectrumAuthState.signedIn,
+        ]),
+      );
+    },
+  );
 
   test('signIn persists the session for the next launch', () async {
     await _service().signIn();
@@ -132,6 +157,7 @@ void main() {
       signInFlow: () async =>
           throw StateError('Sign-in was cancelled or denied.'),
     );
+    addTearDown(service.dispose);
     await service.signIn();
 
     expect(service.snapshot.state, SpectrumAuthState.error);

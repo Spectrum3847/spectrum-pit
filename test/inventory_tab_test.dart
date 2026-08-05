@@ -38,8 +38,6 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
 
-  tearDown(() => controller.dispose());
-
   // Builds a signed-in, bootstrapped controller and (optionally) seeds it via a
   // realtime emission, then pumps the tab under the app theme on a tall surface
   // so the list builds every row.
@@ -53,6 +51,8 @@ void main() {
       authService: FakeSpectrumAuthService(initialUser: _signedInUser),
       syncService: sync,
     );
+    // Cleanup runs only when initialization reached the assignment.
+    addTearDown(controller.dispose);
     await controller.bootstrap();
     if (seed.isNotEmpty) sync.emit(seed);
 
@@ -189,6 +189,19 @@ void main() {
     expect(saved.labLocation, 'RC3');
     expect(saved.pitLocation, 'CAB-C1');
     expect(saved.status, InventoryStatus.inLab);
-    expect(saved.id, startsWith('inv_'));
+    // New records get a UUID v4, never a timestamp-derived id (#161). Matched on
+    // shape rather than merely non-empty, which 'new-item' would also satisfy
+    // (#169).
+    expect(saved.id, isNot(startsWith('inv_')));
+    expect(
+      saved.id,
+      matches(
+        RegExp(
+          r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-'
+          r'[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+          caseSensitive: false,
+        ),
+      ),
+    );
   });
 }

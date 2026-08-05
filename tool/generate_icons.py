@@ -54,7 +54,8 @@ def monochrome(size):
 
 
 def redraw(path, maker):
-    size = Image.open(path).size[0]
+    with Image.open(path) as img:
+        size = max(img.size)
     maker(size).save(path)
     print(f"{path.relative_to(ROOT)} ({size})")
 

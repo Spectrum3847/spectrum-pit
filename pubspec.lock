@@ -114,7 +114,7 @@ packages:
     source: hosted
     version: "0.3.5+4"
   crypto:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: crypto
       sha256: c8ea0233063ba03258fbcf2ca4d6dadfefe14f02fab57702265467a19f27fadf
@@ -309,7 +309,7 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "v0.1.0"
+      ref: e70bf7e60dc27b352b1c89e0abb3a6892c3cbc2b
       resolved-ref: e70bf7e60dc27b352b1c89e0abb3a6892c3cbc2b
       url: "https://github.com/Project516/firestore_client.git"
     source: git
@@ -730,7 +730,7 @@ packages:
     source: hosted
     version: "2.1.8"
   pub_semver:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: pub_semver
       sha256: "5bfcf68ca79ef689f8990d1160781b4bad40a3bd5e5218ad4076ddb7f4081585"

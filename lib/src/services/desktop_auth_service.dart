@@ -58,8 +58,9 @@ class DesktopAuthService implements SpectrumAuthService {
 
   @override
   Future<void> initialize() async {
+    SharedPreferences? prefs;
     try {
-      final prefs = await _prefsLoader();
+      prefs = await _prefsLoader();
       final stored = prefs.getString(_prefsKey);
       if (stored == null) return;
       final user = await _session.restore(
@@ -75,7 +76,11 @@ class DesktopAuthService implements SpectrumAuthService {
       } else {
         await prefs.remove(_prefsKey);
       }
-    } catch (_) {}
+    } catch (_) {
+      try {
+        await prefs?.remove(_prefsKey);
+      } catch (_) {}
+    }
   }
 
   @override

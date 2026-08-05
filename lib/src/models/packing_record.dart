@@ -57,13 +57,14 @@ class PackingRecord implements PitModel {
     String? itemId,
     PackingStatus? packingStatus,
     String? photoRef,
+    bool clearPhotoRef = false,
     DateTime? updatedAt,
   }) {
     return PackingRecord(
       id: id,
       itemId: itemId ?? this.itemId,
       packingStatus: packingStatus ?? this.packingStatus,
-      photoRef: photoRef ?? this.photoRef,
+      photoRef: clearPhotoRef ? null : (photoRef ?? this.photoRef),
       updatedAt: updatedAt ?? this.updatedAt,
     );
   }

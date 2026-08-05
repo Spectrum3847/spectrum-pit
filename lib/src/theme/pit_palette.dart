@@ -58,4 +58,19 @@ class PitPalette {
 
   static Color accentOf(BuildContext context) =>
       _isDark(context) ? violetLifted : violetDeep;
+
+  static Color statusPackingOf(BuildContext context) =>
+      _isDark(context) ? statusPacking : lightStatusPacking;
+
+  static Color statusStagingOf(BuildContext context) =>
+      _isDark(context) ? statusStaging : lightStatusStaging;
+
+  static Color statusLoadingOf(BuildContext context) =>
+      _isDark(context) ? statusLoading : lightStatusLoading;
+
+  static Color statusReadyOf(BuildContext context) =>
+      _isDark(context) ? statusReady : lightStatusReady;
+
+  static Color statusOverdueOf(BuildContext context) =>
+      _isDark(context) ? statusOverdue : lightStatusOverdue;
 }

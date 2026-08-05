@@ -14,7 +14,8 @@ service cloud.firestore {
         && isValidNewProfile(request.resource.data);
       allow update: if isAuthed()
         && isAdmin()
-        && request.auth.uid != uid;
+        && request.auth.uid != uid
+        && isValidProfileUpdate(request.resource.data);
     }
 
     match /appConfig/{docId} {
@@ -95,6 +96,8 @@ service cloud.firestore {
     match /telemetry/{eventId} {
       allow read: if false;
       allow create: if isAuthed()
+        && isMember()
+        && request.resource.data.id == eventId
         && isValidTelemetry(request.resource.data);
       allow update, delete: if false;
     }
@@ -155,6 +158,24 @@ service cloud.firestore {
         && data.displayName.size() <= 256
         && (!('email' in data) || (data.email is string && data.email.size() <= 320))
         && (!('createdAt' in data) || isSaneTimestamp(data.createdAt));
+    }
+
+    function isValidProfileUpdate(data) {
+      return data.keys().hasOnly(['uid', 'displayName', 'email', 'roles',
+              'createdAt'])
+        && (!('uid' in data) || data.uid == resource.data.uid)
+        && (!('createdAt' in data)
+            || data.createdAt == resource.data.createdAt)
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['displayName', 'email', 'roles'])
+        && data.roles is list
+        && data.roles.size() >= 1
+        && data.roles.size() <= 4
+        && data.roles.hasOnly(['viewer', 'pit', 'developer', 'admin'])
+        && (!('displayName' in data)
+            || (data.displayName is string && data.displayName.size() <= 256))
+        && (!('email' in data)
+            || (data.email is string && data.email.size() <= 320));
     }
 
     function isValidInventoryItem(data) {

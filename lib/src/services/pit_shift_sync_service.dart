@@ -24,9 +24,9 @@ class FirestorePitShiftSyncService implements PitShiftSyncService {
 
   @override
   Future<List<PitShift>> fetchAll() async {
+    final QuerySnapshot<Map<String, dynamic>> snapshot;
     try {
-      final snapshot = await _collection.get();
-      return _itemsFrom(snapshot);
+      snapshot = await _collection.get();
     } catch (serverError) {
       try {
         final cached = await _collection.get(
@@ -39,6 +39,7 @@ class FirestorePitShiftSyncService implements PitShiftSyncService {
         return const <PitShift>[];
       }
     }
+    return _itemsFrom(snapshot);
   }
 
   @override

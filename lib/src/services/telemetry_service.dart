@@ -33,17 +33,33 @@ class TelemetryService {
     return prefs.getBool(enabledKey) ?? true;
   }
 
+  Future<bool?> storedPreference() async {
+    final prefs = await _prefsLoader();
+    return prefs.getBool(enabledKey);
+  }
+
   Future<void> setEnabled(bool enabled) async {
     final prefs = await _prefsLoader();
     await prefs.setBool(enabledKey, enabled);
   }
 
+  Future<String>? _deviceIdFuture;
+
   Future<String> _deviceId(SharedPreferences prefs) async {
     final existing = prefs.getString(_deviceIdKey);
     if (existing != null && existing.isNotEmpty) return existing;
-    final id = const Uuid().v4();
-    await prefs.setString(_deviceIdKey, id);
-    return id;
+    return _deviceIdFuture ??= _createDeviceId(prefs);
+  }
+
+  Future<String> _createDeviceId(SharedPreferences prefs) async {
+    try {
+      final id = const Uuid().v4();
+      await prefs.setString(_deviceIdKey, id);
+      return id;
+    } catch (_) {
+      _deviceIdFuture = null;
+      rethrow;
+    }
   }
 
   static String _clamp(String value, int max) =>
@@ -60,6 +76,7 @@ class TelemetryService {
   Future<void> logEvent(String type, {String? detail}) async {
     try {
       final prefs = await _prefsLoader();
+
       if (!(prefs.getBool(enabledKey) ?? true)) return;
       final deviceId = await _deviceId(prefs);
       final info = await _debugInfoLoader();

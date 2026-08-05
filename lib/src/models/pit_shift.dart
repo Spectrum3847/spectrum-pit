@@ -75,8 +75,6 @@ class PitShift implements PitModel {
   }
 
   factory PitShift.fromJson(String id, Map<String, dynamic> data) {
-    final startsAtRaw = data['startsAt'] as String?;
-    final endsAtRaw = data['endsAt'] as String?;
     return PitShift(
       id: id,
       label: data['label'] as String? ?? '',
@@ -86,8 +84,8 @@ class PitShift implements PitModel {
       assignedNames: _stringList(data['assignedNames']),
       startMatch: (data['startMatch'] as num?)?.toInt(),
       endMatch: (data['endMatch'] as num?)?.toInt(),
-      startsAt: startsAtRaw == null ? null : DateTime.tryParse(startsAtRaw),
-      endsAt: endsAtRaw == null ? null : DateTime.tryParse(endsAtRaw),
+      startsAt: _dateTime(data['startsAt']),
+      endsAt: _dateTime(data['endsAt']),
       notes: data['notes'] as String?,
       updatedAt:
           DateTime.tryParse(data['updatedAt'] as String? ?? '') ??
@@ -98,6 +96,12 @@ class PitShift implements PitModel {
   static List<String> _stringList(Object? value) => value is List
       ? value.whereType<String>().toList(growable: false)
       : const <String>[];
+
+  static DateTime? _dateTime(Object? value) {
+    if (value is DateTime) return value;
+    if (value is String) return DateTime.tryParse(value);
+    return null;
+  }
 
   @override
   Map<String, dynamic> toJson() => {

@@ -27,6 +27,19 @@ void main() {
       expect(loc.x, 0);
       expect(loc.y, 0);
       expect(loc.inventoryItemId, isNull);
+      // Missing updatedAt falls back to the Unix epoch in UTC.
+      expect(
+        loc.updatedAt,
+        DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+      );
+    });
+
+    test('an unparseable updatedAt falls back to the Unix epoch', () {
+      final loc = MapLocation.fromJson('x', {'updatedAt': 'not-a-timestamp'});
+      expect(
+        loc.updatedAt,
+        DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+      );
     });
   });
 
@@ -48,6 +61,8 @@ void main() {
       expect(restored.x, original.x);
       expect(restored.y, original.y);
       expect(restored.inventoryItemId, original.inventoryItemId);
+      // updatedAt survives the roundtrip unchanged.
+      expect(restored.updatedAt, original.updatedAt);
     });
 
     test('omits null inventoryItemId', () {

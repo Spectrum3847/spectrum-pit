@@ -42,6 +42,13 @@ void main() {
       expect(controller.roles, {UserRole.pit});
       expect(controller.visibleTabIndices, isNotEmpty);
       expect(controller.canManageUsers, isFalse);
+
+      // Local-only grants pit, never admin, so role management is unavailable
+      // (user management needs Firestore, which is absent offline).
+      await expectLater(
+        controller.updateUserRoles('local', {UserRole.admin}),
+        throwsStateError,
+      );
     },
   );
 }
