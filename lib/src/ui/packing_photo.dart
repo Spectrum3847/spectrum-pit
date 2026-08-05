@@ -254,10 +254,7 @@ String _timestamp(DateTime value) {
       '${two(local.hour)}:${two(local.minute)}';
 }
 
-Color _overdueOf(BuildContext context) =>
-    Theme.of(context).brightness == Brightness.dark
-    ? PitPalette.statusOverdue
-    : PitPalette.lightStatusOverdue;
+Color _overdueOf(BuildContext context) => PitPalette.statusOverdueOf(context);
 
 class _PhotoMessage extends StatelessWidget {
   const _PhotoMessage({

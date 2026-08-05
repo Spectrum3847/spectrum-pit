@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 
 import '../models/pit_shift.dart';
 import '../models/user_profile.dart';
@@ -70,12 +71,6 @@ class _ScheduleTabState extends State<ScheduleTab> {
     final conflicts = widget.controller.conflicts
         .where((c) => c.first.competition == competition)
         .toList();
-    final conflictIds = <String>{
-      for (final conflict in conflicts) ...[
-        conflict.first.id,
-        conflict.second.id,
-      ],
-    };
 
     final rows = _mineOnly
         ? shifts
@@ -85,6 +80,13 @@ class _ScheduleTabState extends State<ScheduleTab> {
     final shownConflicts = _mineOnly
         ? conflicts.where((c) => uid != null && _involves(c, uid)).toList()
         : conflicts;
+
+    final conflictIds = <String>{
+      for (final conflict in shownConflicts) ...[
+        conflict.first.id,
+        conflict.second.id,
+      ],
+    };
 
     return Column(
       children: [
@@ -793,11 +795,31 @@ class _ShiftEditorSheetState extends State<_ShiftEditorSheet> {
     _RangeMode.time => _startsAt != null || _endsAt != null,
   };
 
+  bool get _rangeValid => switch (_mode) {
+    _RangeMode.match => _matchRangeValid,
+    _RangeMode.time => _timeRangeValid,
+  };
+
+  bool get _matchRangeValid {
+    final start = int.tryParse(_startMatch.text.trim());
+    final end = int.tryParse(_endMatch.text.trim());
+    if (start == null || end == null) return true;
+    return start <= end;
+  }
+
+  bool get _timeRangeValid {
+    final start = _startsAt;
+    final end = _endsAt;
+    if (start == null || end == null) return true;
+    return !start.isAfter(end);
+  }
+
   bool get _canSave =>
       _label.text.trim().isNotEmpty &&
       _competition.text.trim().isNotEmpty &&
       _selected.isNotEmpty &&
-      _rangeSet;
+      _rangeSet &&
+      _rangeValid;
 
   void _save() {
     if (!_canSave) return;
@@ -806,7 +828,7 @@ class _ShiftEditorSheetState extends State<_ShiftEditorSheet> {
     final uids = _selected.keys.toList(growable: false);
     widget.onSubmit(
       PitShift(
-        id: existing?.id ?? 'shift_${DateTime.now().microsecondsSinceEpoch}',
+        id: existing?.id ?? const Uuid().v4(),
         label: _label.text.trim(),
         kind: _kind,
         competition: _competition.text.trim(),
@@ -1166,24 +1188,16 @@ IconData _kindIcon(ShiftKind kind) => switch (kind) {
 };
 
 Color _kindColor(BuildContext context, ShiftKind kind) {
-  final dark = Theme.of(context).brightness == Brightness.dark;
   return switch (kind) {
-    ShiftKind.loadIn =>
-      dark ? PitPalette.statusStaging : PitPalette.lightStatusStaging,
-    ShiftKind.matchBlock =>
-      dark ? PitPalette.statusReady : PitPalette.lightStatusReady,
-    ShiftKind.pitDuty =>
-      dark ? PitPalette.statusLoading : PitPalette.lightStatusLoading,
-    ShiftKind.loadOut =>
-      dark ? PitPalette.statusPacking : PitPalette.lightStatusPacking,
+    ShiftKind.loadIn => PitPalette.statusStagingOf(context),
+    ShiftKind.matchBlock => PitPalette.statusReadyOf(context),
+    ShiftKind.pitDuty => PitPalette.statusLoadingOf(context),
+    ShiftKind.loadOut => PitPalette.statusPackingOf(context),
     ShiftKind.unavailable => PitPalette.inkMutedOf(context),
   };
 }
 
-Color _overdueOf(BuildContext context) =>
-    Theme.of(context).brightness == Brightness.dark
-    ? PitPalette.statusOverdue
-    : PitPalette.lightStatusOverdue;
+Color _overdueOf(BuildContext context) => PitPalette.statusOverdueOf(context);
 
 String _rangeLabel(PitShift shift) {
   if (shift.hasMatchRange) {

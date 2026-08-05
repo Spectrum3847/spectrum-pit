@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -245,5 +246,58 @@ void main() {
       find.widgetWithText(FilledButton, 'Sign in with Google'),
       findsNothing,
     );
+  });
+
+  // #115: both desktop guidelines this app is measured against treat full
+  // keyboard operation as a requirement, and the app ships desktop builds. There
+  // was no keyboard path to the destinations at all.
+  group('keyboard destination navigation', () {
+    Future<void> press(WidgetTester tester, LogicalKeyboardKey key) async {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(key);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+    }
+
+    int selected(WidgetTester tester) =>
+        tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex;
+
+    testWidgets('ctrl+] moves forward and ctrl+[ moves back', (tester) async {
+      const user = SpectrumUser(uid: 'admin-uid', displayName: 'Admin');
+      await _buildShell(
+        tester,
+        signedInUser: user,
+        userRoles: {UserRole.admin},
+      );
+
+      expect(selected(tester), 0);
+
+      await press(tester, LogicalKeyboardKey.bracketRight);
+      expect(selected(tester), 1);
+
+      await press(tester, LogicalKeyboardKey.bracketLeft);
+      expect(selected(tester), 0);
+    });
+
+    testWidgets('it wraps at both ends rather than sticking', (tester) async {
+      const user = SpectrumUser(uid: 'admin-uid', displayName: 'Admin');
+      await _buildShell(
+        tester,
+        signedInUser: user,
+        userRoles: {UserRole.admin},
+      );
+      final count = tester
+          .widget<NavigationBar>(find.byType(NavigationBar))
+          .destinations
+          .length;
+
+      // Back from the first lands on the last: stopping there would make the
+      // shortcut feel broken, and there is no ordering meaning to preserve.
+      await press(tester, LogicalKeyboardKey.bracketLeft);
+      expect(selected(tester), count - 1);
+
+      await press(tester, LogicalKeyboardKey.bracketRight);
+      expect(selected(tester), 0);
+    });
   });
 }

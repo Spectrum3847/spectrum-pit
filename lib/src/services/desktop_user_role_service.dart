@@ -4,7 +4,7 @@ import 'package:firestore_client/firestore_client.dart' as fc;
 
 import '../models/user_profile.dart';
 import '../models/user_role.dart';
-import 'user_role_service.dart';
+import 'user_role_service_interface.dart';
 
 class DesktopUserRoleService implements UserRoleService {
   DesktopUserRoleService({
@@ -58,13 +58,11 @@ class DesktopUserRoleService implements UserRoleService {
       List<UserProfile>? profiles;
       try {
         final docs = await _firestore.listDocuments('userProfiles');
-        profiles =
-            docs.map((d) => UserProfile.fromJson(d.id, d.fields)).toList()
-              ..sort(
-                (a, b) => a.displayName.toLowerCase().compareTo(
-                  b.displayName.toLowerCase(),
-                ),
-              );
+        final parsed = docs
+            .map((d) => UserProfile.fromJson(d.id, d.fields))
+            .toList();
+        parsed.sort(UserProfile.byDisplayName);
+        profiles = parsed;
       } catch (_) {
         if (last == null) {
           rethrow;

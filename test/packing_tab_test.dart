@@ -33,11 +33,13 @@ Future<PackingController> _makeController({
   List<PackingRecord> initial = const [],
 }) async {
   SharedPreferences.setMockInitialValues({});
-  final sync = FakePackingSyncService();
+  sync = FakePackingSyncService();
   final controller = PackingController(
     authService: FakeSpectrumAuthService(initialUser: _user),
     syncService: sync,
   );
+  // Cleanup runs even when an expectation fails later.
+  addTearDown(controller.dispose);
   await controller.bootstrap();
   if (initial.isNotEmpty) sync.emit(initial);
   return controller;
@@ -55,6 +57,8 @@ Widget _wrap(PackingController controller, {PhotoService? photoService}) =>
       ),
     );
 
+late FakePackingSyncService sync;
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -67,7 +71,6 @@ void main() {
 
     expect(find.text('The packing list is empty'), findsOneWidget);
     expect(find.text('Add item'), findsWidgets);
-    controller.dispose();
   });
 
   testWidgets('items are displayed in a list', (tester) async {
@@ -82,7 +85,6 @@ void main() {
 
     expect(find.text('Drill Kit'), findsOneWidget);
     expect(find.text('Soldering Iron'), findsOneWidget);
-    controller.dispose();
   });
 
   testWidgets('status chip shows the correct label', (tester) async {
@@ -93,7 +95,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Staging'), findsOneWidget);
-    controller.dispose();
   });
 
   testWidgets('tapping status chip advances the pipeline', (tester) async {
@@ -109,7 +110,7 @@ void main() {
 
     expect(controller.items.single.packingStatus, PackingStatus.staging);
     expect(find.text('Staging'), findsOneWidget);
-    controller.dispose();
+    expect(sync.upserts, isNotEmpty);
   });
 
   testWidgets('FAB opens the add editor', (tester) async {
@@ -122,7 +123,6 @@ void main() {
 
     expect(find.text('Add packing item'), findsOneWidget);
     expect(find.byType(TextField), findsOneWidget);
-    controller.dispose();
   });
 
   testWidgets('add editor creates a new record', (tester) async {
@@ -141,7 +141,6 @@ void main() {
 
     expect(controller.items.length, 1);
     expect(controller.items.single.itemId, 'Wrench Set');
-    controller.dispose();
   });
 
   testWidgets('add button is disabled when name is empty', (tester) async {
@@ -157,7 +156,6 @@ void main() {
     );
     // The save button should be disabled when the text field is empty.
     expect(button.onPressed, isNull);
-    controller.dispose();
   });
 
   testWidgets('tapping a row opens the edit editor', (tester) async {
@@ -172,7 +170,6 @@ void main() {
 
     expect(find.text('Edit packing item'), findsOneWidget);
     expect(find.byIcon(Icons.delete_outline_rounded), findsOneWidget);
-    controller.dispose();
   });
 
   testWidgets('a record with no photo shows the capture affordance', (
@@ -184,7 +181,6 @@ void main() {
 
     expect(find.byIcon(Icons.add_a_photo_outlined), findsOneWidget);
     expect(find.byTooltip('Add a packing photo'), findsOneWidget);
-    controller.dispose();
   });
 
   testWidgets('an attached photo renders as a thumbnail', (tester) async {
@@ -202,7 +198,6 @@ void main() {
     expect(find.byType(Image), findsOneWidget);
     expect(find.byIcon(Icons.add_a_photo_outlined), findsNothing);
     expect(find.byTooltip('Open the packing photo'), findsOneWidget);
-    controller.dispose();
   });
 
   testWidgets('a photo that will not load offers a retry', (tester) async {
@@ -224,7 +219,6 @@ void main() {
       find.byTooltip('Photo did not load. Tap to try again.'),
       findsOneWidget,
     );
-    controller.dispose();
   });
 
   testWidgets('photos degrade to an unavailable slot with no ID token', (
@@ -237,36 +231,37 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byIcon(Icons.cloud_off_rounded), findsOneWidget);
-    controller.dispose();
   });
 
   testWidgets('tapping the empty slot captures and attaches the photo', (
     tester,
   ) async {
     // Desktop offers one capture source, so the tap goes straight to the
-    // picker with no source sheet in between.
+    // picker with no source sheet in between. The override is reset in the
+    // finally block so a failing expectation still clears it.
     debugDefaultTargetPlatformOverride = TargetPlatform.linux;
-    final controller = await _makeController(initial: [_record('a')]);
-    await tester.pumpWidget(
-      _wrap(
-        controller,
-        photoService: fakePhotoService(
-          picker: (_) async =>
-              PickedPhoto(bytes: tinyPng, contentType: 'image/png'),
+    try {
+      final controller = await _makeController(initial: [_record('a')]);
+      await tester.pumpWidget(
+        _wrap(
+          controller,
+          photoService: fakePhotoService(
+            picker: (_) async =>
+                PickedPhoto(bytes: tinyPng, contentType: 'image/png'),
+          ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.add_a_photo_outlined));
-    await tester.pumpAndSettle();
-    // The binding checks this before tearDown callbacks run, so it cannot be
-    // reset with addTearDown.
-    debugDefaultTargetPlatformOverride = null;
+      await tester.tap(find.byIcon(Icons.add_a_photo_outlined));
+      await tester.pumpAndSettle();
 
-    expect(controller.items.single.photoRef, 'key-0.jpg');
-    expect(find.byType(Image), findsOneWidget);
-    controller.dispose();
+      expect(controller.items.single.photoRef, 'key-0.jpg');
+      expect(find.byType(Image), findsOneWidget);
+      expect(sync.upserts, isNotEmpty);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 
   testWidgets('the viewer removes the photo and its stored key', (
@@ -292,7 +287,6 @@ void main() {
 
     expect(controller.items.single.photoRef, isNull);
     expect(stored, isEmpty);
-    controller.dispose();
   });
 
   testWidgets('delete button removes the record', (tester) async {
@@ -313,44 +307,45 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(controller.items, isEmpty);
-    controller.dispose();
   });
 
   testWidgets('a photo captured in the add editor lands on the new record', (
     tester,
   ) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.linux;
-    final controller = await _makeController();
-    await tester.pumpWidget(
-      _wrap(
-        controller,
-        photoService: fakePhotoService(
-          picker: (_) async =>
-              PickedPhoto(bytes: tinyPng, contentType: 'image/png'),
+    try {
+      final controller = await _makeController();
+      await tester.pumpWidget(
+        _wrap(
+          controller,
+          photoService: fakePhotoService(
+            picker: (_) async =>
+                PickedPhoto(bytes: tinyPng, contentType: 'image/png'),
+          ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.byType(FloatingActionButton));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byType(FloatingActionButton));
+      await tester.pumpAndSettle();
 
-    // The editor sheet's empty photo affordance offers capture.
-    expect(find.text('Add packing item'), findsOneWidget);
-    await tester.tap(find.text('Add photo'));
-    await tester.pumpAndSettle();
+      // The editor sheet's empty photo affordance offers capture.
+      expect(find.text('Add packing item'), findsOneWidget);
+      await tester.tap(find.text('Add photo'));
+      await tester.pumpAndSettle();
 
-    // Name the item and save; the returned photoRef rides along.
-    await tester.enterText(find.byType(TextField), 'Wrench Set');
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Add item').last);
-    await tester.pumpAndSettle();
+      // Name the item and save; the returned photoRef rides along.
+      await tester.enterText(find.byType(TextField), 'Wrench Set');
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Add item').last);
+      await tester.pumpAndSettle();
 
-    debugDefaultTargetPlatformOverride = null;
-
-    expect(controller.items.length, 1);
-    expect(controller.items.single.itemId, 'Wrench Set');
-    expect(controller.items.single.photoRef, 'key-0.jpg');
-    controller.dispose();
+      expect(controller.items.length, 1);
+      expect(controller.items.single.itemId, 'Wrench Set');
+      expect(controller.items.single.photoRef, 'key-0.jpg');
+      expect(sync.upserts, isNotEmpty);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -9,6 +10,7 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
 import 'http_timeout_client.dart';
+import 'photo_disk_cache.dart';
 
 enum PhotoSource { camera, gallery, file }
 
@@ -35,7 +37,9 @@ class PhotoService {
     http.Client? httpClient,
     Future<PickedPhoto?> Function(PhotoSource source)? picker,
     int cacheLimit = _defaultCacheLimit,
+    PhotoDiskCache? diskCache,
   }) : _idToken = idToken,
+       _diskCache = diskCache,
        _baseUrl = baseUrl ?? Uri.parse(_defaultBaseUrl),
 
        _client =
@@ -58,6 +62,8 @@ class PhotoService {
   final http.Client _client;
   final Future<PickedPhoto?> Function(PhotoSource source) _picker;
   final int _cacheLimit;
+
+  final PhotoDiskCache? _diskCache;
 
   final LinkedHashMap<String, Uint8List> _cache =
       LinkedHashMap<String, Uint8List>();
@@ -111,6 +117,12 @@ class PhotoService {
       _cache[key] = cached;
       return cached;
     }
+
+    final onDisk = await _diskCache?.read(key);
+    if (onDisk != null) {
+      _remember(key, onDisk);
+      return onDisk;
+    }
     final response = await _send(
       http.Request('GET', _baseUrl.resolve('/photos/$key')),
     );
@@ -118,11 +130,16 @@ class PhotoService {
     if (response.statusCode != 200) throw _failure('load', response);
     final bytes = response.bodyBytes;
     _remember(key, bytes);
+
+    final disk = _diskCache;
+    if (disk != null) unawaited(disk.write(key, bytes));
     return bytes;
   }
 
   Future<void> delete(String key) async {
     _cache.remove(key);
+
+    await _diskCache?.remove(key);
     final response = await _send(
       http.Request('DELETE', _baseUrl.resolve('/photos/$key')),
     );
@@ -133,6 +150,11 @@ class PhotoService {
   }
 
   void close() => _client.close();
+
+  Future<void> clearCache() async {
+    _cache.clear();
+    await _diskCache?.clear();
+  }
 
   Future<http.Response?> _send(http.Request request) async {
     final token = await _idToken();

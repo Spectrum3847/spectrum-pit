@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'services/issue_report_service.dart';
@@ -51,10 +53,16 @@ class StrategyApp extends StatefulWidget {
 
 class _StrategyAppState extends State<StrategyApp> {
   late Future<void> _bootstrapFuture;
+  StreamSubscription<SpectrumAuthSnapshot>? _authSubscription;
+
+  bool _wasSignedIn = false;
 
   @override
   void initState() {
     super.initState();
+    _authSubscription = widget.authService.snapshotStream.listen(
+      _onAuthSnapshot,
+    );
     widget.themeController.addListener(_onThemeChanged);
     _bootstrapFuture = _startBootstrap();
   }
@@ -83,6 +91,7 @@ class _StrategyAppState extends State<StrategyApp> {
   @override
   void dispose() {
     widget.themeController.removeListener(_onThemeChanged);
+    _authSubscription?.cancel();
     widget.authService.dispose();
     widget.themeController.dispose();
     widget.userRoleController.dispose();
@@ -93,6 +102,14 @@ class _StrategyAppState extends State<StrategyApp> {
     widget.photoService.close();
     widget.pitShiftController.dispose();
     super.dispose();
+  }
+
+  void _onAuthSnapshot(SpectrumAuthSnapshot snapshot) {
+    final signedIn = snapshot.state == SpectrumAuthState.signedIn;
+    if (_wasSignedIn && !signedIn) {
+      unawaited(widget.photoService.clearCache());
+    }
+    _wasSignedIn = signedIn;
   }
 
   @override

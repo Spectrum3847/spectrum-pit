@@ -5,6 +5,14 @@
          prompt have to stay together. Reading the photo library needs no
          permission on the API levels this app supports. -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Required so release builds always have network access; Flutter's debug
+         and profile manifests add INTERNET themselves, but a release build must
+         not depend on them or on transitive libraries. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- CAMERA is an optional feature: the app works without a camera (packing
+         photos just fall back to the photo library), so declare it not required
+         to keep Google Play listing the app on camera-less devices. -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
     <application
         android:label="Spectrum Pit"
         android:name="${applicationName}"

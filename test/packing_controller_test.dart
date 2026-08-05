@@ -142,11 +142,15 @@ void main() {
     );
     await Future.wait([controller.bootstrap(), controller.bootstrap()]);
 
+    var notified = 0;
+    controller.addListener(() => notified++);
     sync.emit([_item('x')]);
     await Future<void>.delayed(Duration.zero);
 
-    // A double subscription would still land a consistent single list.
+    // A double subscription would still land a consistent single list, and
+    // the single emission produces exactly one notification.
     expect(controller.items.map((i) => i.id), ['x']);
+    expect(notified, 1);
     controller.dispose();
   });
 

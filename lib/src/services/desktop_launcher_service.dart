@@ -46,11 +46,18 @@ class DesktopLauncherService {
   }
 
   static String desktopEntry(String appImagePath, {String? iconPath}) {
+    final exec = appImagePath.replaceAllMapped(
+      RegExp(r'["`$\\]'),
+      (m) => '\\${m[0]}',
+    );
+    final icon = (iconPath ?? 'spectrumpit')
+        .replaceAll('\\', r'\\')
+        .replaceAll('\n', r'\n');
     return '[Desktop Entry]\n'
         'Type=Application\n'
         'Name=Spectrum Pit\n'
-        'Exec="$appImagePath" %U\n'
-        'Icon=${iconPath ?? 'spectrumpit'}\n'
+        'Exec="$exec" %U\n'
+        'Icon=$icon\n'
         'Categories=Utility;\n'
         'Terminal=false\n';
   }

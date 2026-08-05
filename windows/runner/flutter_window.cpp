@@ -59,12 +59,12 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     if (result) {
       return *result;
     }
-  }
 
-  switch (message) {
-    case WM_FONTCHANGE:
+    // Reload fonts when the system font set changes. Only valid while the
+    // controller exists; OnDestroy may have cleared it.
+    if (message == WM_FONTCHANGE) {
       flutter_controller_->engine()->ReloadSystemFonts();
-      break;
+    }
   }
 
   return Win32Window::MessageHandler(hwnd, message, wparam, lparam);

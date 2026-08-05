@@ -25,7 +25,12 @@ class UserProfile {
           .toSet();
       roles = parsed.isEmpty ? {UserRole.viewer} : parsed;
     } else {
-      roles = {UserRole.fromString(data['role'] as String?)};
+      final legacyRole = data['role'];
+      roles = {
+        legacyRole is String
+            ? UserRole.fromString(legacyRole)
+            : UserRole.viewer,
+      };
     }
     return UserProfile(
       uid: uid,
@@ -33,6 +38,13 @@ class UserProfile {
       email: data['email'] as String?,
       roles: roles,
     );
+  }
+
+  static int byDisplayName(UserProfile a, UserProfile b) {
+    final byName = a.displayName.toLowerCase().compareTo(
+      b.displayName.toLowerCase(),
+    );
+    return byName != 0 ? byName : a.uid.compareTo(b.uid);
   }
 
   Map<String, dynamic> toJson() => {

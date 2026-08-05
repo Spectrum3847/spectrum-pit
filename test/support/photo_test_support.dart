@@ -42,6 +42,13 @@ PhotoService fakePhotoService({
     cacheLimit: cacheLimit,
     httpClient: MockClient((request) async {
       requests?.add(request);
+      // The Worker authenticates every request with the caller's Bearer token;
+      // simulate that gate so an unauthenticated request cannot hit the
+      // storage logic.
+      final expected = token == null ? null : 'Bearer $token';
+      if (request.headers['Authorization'] != expected) {
+        return http.Response('{"error":"Unauthorized"}', 401);
+      }
       if (respond != null) return respond(request);
       final key = request.url.pathSegments.length > 1
           ? request.url.pathSegments.last

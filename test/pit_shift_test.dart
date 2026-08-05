@@ -68,6 +68,12 @@ void main() {
       expect(shift.startsAt, isNull);
       expect(shift.endsAt, isNull);
       expect(shift.notes, isNull);
+      // Absent updatedAt falls back to the Unix epoch in UTC, matching the
+      // other pit models.
+      expect(
+        shift.updatedAt,
+        DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+      );
     });
 
     test('drops non-string entries from the assignment lists', () {
@@ -91,6 +97,8 @@ void main() {
         assignedNames: const ['Cass'],
         startMatch: 30,
         endMatch: 45,
+        startsAt: DateTime.utc(2026, 4, 10, 8),
+        endsAt: DateTime.utc(2026, 4, 10, 12),
         notes: 'Queue early',
         updatedAt: DateTime.utc(2026, 3, 15),
       );
@@ -102,6 +110,8 @@ void main() {
       expect(restored.assignedNames, original.assignedNames);
       expect(restored.startMatch, original.startMatch);
       expect(restored.endMatch, original.endMatch);
+      expect(restored.startsAt, original.startsAt);
+      expect(restored.endsAt, original.endsAt);
       expect(restored.notes, original.notes);
       expect(restored.updatedAt, original.updatedAt);
     });
@@ -298,6 +308,31 @@ void main() {
         endsAt: _at(14),
       );
       expect(duty.conflictsWith(away), isTrue);
+    });
+
+    test('an inverted match range still conflicts through its edges', () {
+      // The editor refuses inverted ranges (start > end), but if one reaches
+      // conflict detection the bounds are compared as-is: it overlaps any
+      // range that touches both edges and no range sitting entirely between
+      // them. A range touching only one edge does not conflict -- the overlap
+      // math needs a span from the lower bound through the upper bound.
+      final inverted = _shift('a', startMatch: 20, endMatch: 5);
+      expect(
+        inverted.conflictsWith(_shift('b', startMatch: 1, endMatch: 30)),
+        isTrue,
+      );
+      expect(
+        inverted.conflictsWith(_shift('c', startMatch: 10, endMatch: 15)),
+        isFalse,
+      );
+      expect(
+        inverted.conflictsWith(_shift('d', startMatch: 1, endMatch: 5)),
+        isFalse,
+      );
+      expect(
+        inverted.conflictsWith(_shift('e', startMatch: 20, endMatch: 30)),
+        isFalse,
+      );
     });
 
     test('two unavailable blocks for the same person do not conflict', () {

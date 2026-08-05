@@ -34,6 +34,7 @@ void main() {
       authService: FakeSpectrumAuthService(),
       roleService: roleService,
     );
+    addTearDown(controller.dispose);
 
     await tester.pumpWidget(
       MaterialApp(
@@ -68,6 +69,7 @@ void main() {
       ),
       roleService: roleService,
     );
+    addTearDown(controller.dispose);
     await controller.bootstrap();
 
     await tester.pumpWidget(

@@ -2,18 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/user_profile.dart';
 import '../models/user_role.dart';
-
-abstract class UserRoleService {
-  Future<Set<UserRole>> fetchOrCreateRoles({
-    required String uid,
-    String displayName = '',
-    String? email,
-  });
-
-  Future<void> updateRoles(String targetUid, Set<UserRole> roles);
-
-  Stream<List<UserProfile>> streamAllProfiles();
-}
+import 'user_role_service_interface.dart';
 
 class FirestoreUserRoleService implements UserRoleService {
   FirestoreUserRoleService({FirebaseFirestore? firestore})
@@ -62,21 +51,23 @@ class FirestoreUserRoleService implements UserRoleService {
 
   @override
   Future<void> updateRoles(String targetUid, Set<UserRole> roles) async {
-    await _firestore.collection('userProfiles').doc(targetUid).update({
+    await _firestore.collection('userProfiles').doc(targetUid).set({
       'roles': roles.map((r) => r.name).toList(),
-    });
+    }, SetOptions(merge: true));
   }
 
   @override
   Stream<List<UserProfile>> streamAllProfiles() {
-    return _firestore
-        .collection('userProfiles')
-        .orderBy('displayName')
-        .snapshots()
-        .map(
-          (snapshot) => snapshot.docs
-              .map((doc) => UserProfile.fromJson(doc.id, doc.data()))
-              .toList(),
-        );
+    return _firestore.collection('userProfiles').snapshots().map(_profilesFrom);
+  }
+
+  List<UserProfile> _profilesFrom(
+    QuerySnapshot<Map<String, dynamic>> snapshot,
+  ) {
+    final profiles = snapshot.docs
+        .map((doc) => UserProfile.fromJson(doc.id, doc.data()))
+        .toList();
+    profiles.sort(UserProfile.byDisplayName);
+    return profiles;
   }
 }

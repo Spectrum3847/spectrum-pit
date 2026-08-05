@@ -3,7 +3,7 @@ import 'dart:async';
 import '../models/user_profile.dart';
 import '../models/user_role.dart';
 import 'spectrum_auth_service.dart';
-import 'user_role_service.dart';
+import 'user_role_service_interface.dart';
 
 class LocalOnlyAuthService implements SpectrumAuthService {
   LocalOnlyAuthService();

@@ -35,6 +35,17 @@ enum UserRole {
   bool get canManageUsers => this == UserRole.admin;
 }
 
+abstract final class AppTabs {
+  static const int inventory = 0;
+  static const int packing = 1;
+  static const int borrowed = 2;
+  static const int maps = 3;
+  static const int schedule = 4;
+  static const int docs = 5;
+  static const int users = 6;
+  static const int settings = 7;
+}
+
 extension UserRoleSetPermissions on Set<UserRole> {
   List<int> get visibleTabIndices {
     final tabs = <int>{};
@@ -44,9 +55,26 @@ extension UserRoleSetPermissions on Set<UserRole> {
           break;
         case UserRole.pit:
         case UserRole.developer:
-          tabs.addAll(const [0, 1, 2, 3, 4, 5, 7]);
+          tabs.addAll(const [
+            AppTabs.inventory,
+            AppTabs.packing,
+            AppTabs.borrowed,
+            AppTabs.maps,
+            AppTabs.schedule,
+            AppTabs.docs,
+            AppTabs.settings,
+          ]);
         case UserRole.admin:
-          tabs.addAll(const [0, 1, 2, 3, 4, 5, 6, 7]);
+          tabs.addAll(const [
+            AppTabs.inventory,
+            AppTabs.packing,
+            AppTabs.borrowed,
+            AppTabs.maps,
+            AppTabs.schedule,
+            AppTabs.docs,
+            AppTabs.users,
+            AppTabs.settings,
+          ]);
       }
     }
     return tabs.toList()..sort();

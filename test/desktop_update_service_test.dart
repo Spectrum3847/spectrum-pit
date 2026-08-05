@@ -88,4 +88,38 @@ void main() {
     expect(info, isNotNull);
     expect(info!.appImageUrl, 'https://example.com/app.AppImage');
   });
+
+  test(
+    'keeps checking the fallback repository when the primary has nothing',
+    () async {
+      final requested = <String>[];
+      final client = MockClient((request) async {
+        final segments = request.url.pathSegments;
+        final repo = '${segments[1]}/${segments[2]}';
+        requested.add(repo);
+        // The primary has no newer release; the fallback does.
+        final tag = segments[2] == 'primary' ? 'v1.0.0' : 'v2.0.0';
+        return http.Response(
+          jsonEncode({
+            'tag_name': tag,
+            'html_url': 'https://example.com/releases/$tag',
+          }),
+          200,
+        );
+      });
+      final service = DesktopUpdateService(
+        client: client,
+        currentVersionLoader: () async => '1.5.0',
+        repositories: const ['owner/primary', 'owner/fallback'],
+      );
+
+      final info = await service.checkForUpdate();
+
+      // A null (no-newer) result from the primary does not end the search.
+      expect(requested, ['owner/primary', 'owner/fallback']);
+      expect(info, isNotNull);
+      expect(info!.latestVersion, 'v2.0.0');
+      expect(info.repository, 'owner/fallback');
+    },
+  );
 }

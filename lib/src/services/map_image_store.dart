@@ -90,15 +90,28 @@ class LocalMapImageStore implements MapImageStore {
   static Future<Size> _decodeSize(File file) async {
     final bytes = await file.readAsBytes();
     final codec = await ui.instantiateImageCodec(bytes);
-    final frame = await codec.getNextFrame();
-    return Size(frame.image.width.toDouble(), frame.image.height.toDouble());
+    try {
+      final frame = await codec.getNextFrame();
+      final size = Size(
+        frame.image.width.toDouble(),
+        frame.image.height.toDouble(),
+      );
+
+      frame.image.dispose();
+      return size;
+    } finally {
+      codec.dispose();
+    }
   }
 
   String _prefsKey(MapType mapType) => '$_prefsPrefix${mapType.name}';
 
+  static const Set<String> _allowedExtensions = {'png', 'jpg', 'jpeg', 'webp'};
+
   static String _extensionOf(String name) {
     final dot = name.lastIndexOf('.');
-    return dot < 0 ? '.png' : name.substring(dot);
+    final ext = dot < 0 ? '' : name.substring(dot + 1).toLowerCase();
+    return _allowedExtensions.contains(ext) ? '.$ext' : '.png';
   }
 
   static Future<XFile?> _defaultFilePicker() {

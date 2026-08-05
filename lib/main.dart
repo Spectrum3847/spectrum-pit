@@ -25,6 +25,7 @@ import 'src/services/map_image_store.dart';
 import 'src/services/map_diagram_sync_service.dart';
 import 'src/services/map_location_sync_service.dart';
 import 'src/services/packing_sync_service.dart';
+import 'src/services/photo_disk_cache.dart';
 import 'src/services/photo_service.dart';
 import 'src/services/synced_map_image_store.dart';
 import 'src/services/pit_shift_sync_service.dart';
@@ -32,6 +33,7 @@ import 'src/services/telemetry_service.dart';
 import 'src/services/http_timeout_client.dart';
 import 'src/services/spectrum_auth_service.dart';
 import 'src/services/user_role_service.dart';
+import 'src/services/user_role_service_interface.dart';
 import 'src/state/borrow_controller.dart';
 import 'src/state/inventory_controller.dart';
 import 'src/state/map_location_controller.dart';
@@ -158,15 +160,14 @@ Future<void> main() async {
     syncService: pitShiftSyncService,
   );
 
-  final photoService = PhotoService(idToken: authService.idToken);
+  final photoService = PhotoService(
+    idToken: authService.idToken,
+    diskCache: PhotoDiskCache(),
+  );
 
   final MapImageStore mapImageStore;
-  if (firebaseReady && !_isDesktop) {
-    mapImageStore = SyncedMapImageStore(
-      photoService: photoService,
-      diagramSync: mapDiagramSyncService,
-    );
-  } else if (_isDesktop && _oauthClientId.isNotEmpty) {
+  if ((firebaseReady && !_isDesktop) ||
+      (_isDesktop && _oauthClientId.isNotEmpty)) {
     mapImageStore = SyncedMapImageStore(
       photoService: photoService,
       diagramSync: mapDiagramSyncService,

@@ -72,6 +72,9 @@ class FirebaseSpectrumAuthService implements SpectrumAuthService {
 
   @override
   Future<void> initialize() async {
+    if (!kIsWeb) {
+      await _googleSignIn.initialize();
+    }
     _authStateSubscription = _appAuth.authStateChanges().listen((user) {
       if (user == null) {
         if (_snapshot.state != SpectrumAuthState.signingIn) {

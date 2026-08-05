@@ -60,11 +60,13 @@ class InventoryItem implements PitModel {
     'updatedAt': updatedAt.toIso8601String(),
   };
 
+  static const Object _mapRefUnset = Object();
+
   InventoryItem copyWith({
     String? name,
     String? labLocation,
     String? pitLocation,
-    String? mapRef,
+    Object? mapRef = _mapRefUnset,
     InventoryStatus? status,
     DateTime? updatedAt,
   }) {
@@ -73,7 +75,7 @@ class InventoryItem implements PitModel {
       name: name ?? this.name,
       labLocation: labLocation ?? this.labLocation,
       pitLocation: pitLocation ?? this.pitLocation,
-      mapRef: mapRef ?? this.mapRef,
+      mapRef: mapRef == _mapRefUnset ? this.mapRef : mapRef as String?,
       status: status ?? this.status,
       updatedAt: updatedAt ?? this.updatedAt,
     );

@@ -191,6 +191,8 @@ void main() {
 
   test('pickImage hands each platform its own source, returns the bytes, and '
       'never uploads', () async {
+    // Restore the platform override even if an expectation fails below.
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
     for (final (platform, expected) in [
       (TargetPlatform.iOS, PhotoSource.gallery),
       (TargetPlatform.linux, PhotoSource.file),
@@ -212,18 +214,17 @@ void main() {
       expect(picked!.bytes, photo.bytes);
       expect(requests, isEmpty);
     }
-    debugDefaultTargetPlatformOverride = null;
 
     final cancelled = fakePhotoService(picker: (_) async => null);
     expect(await cancelled.pickImage(), isNull);
   });
 
   test('sources follow the platform: camera on mobile, files elsewhere', () {
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
     final service = fakePhotoService();
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
     expect(service.sources, [PhotoSource.camera, PhotoSource.gallery]);
     debugDefaultTargetPlatformOverride = TargetPlatform.linux;
     expect(service.sources, [PhotoSource.file]);
-    debugDefaultTargetPlatformOverride = null;
   });
 }

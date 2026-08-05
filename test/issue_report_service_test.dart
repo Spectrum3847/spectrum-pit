@@ -62,8 +62,23 @@ void main() {
     final data = (await firestore.collection('bugReports').get()).docs.single
         .data();
     expect(data['roles'], 'Admin, Pit');
-    // Still only whitelisted keys, now including roles.
-    expect(data.keys.contains('roles'), isTrue);
+    // Still exactly the whitelisted keys, now including roles (mirrors the
+    // key-set comparison in the first test; firestore.rules isValidBugReport
+    // is the source of truth for this set).
+    expect(data.keys.toSet(), {
+      'id',
+      'title',
+      'body',
+      'reporterUid',
+      'reporterName',
+      'appVersion',
+      'platform',
+      'osVersion',
+      'deviceInfo',
+      'status',
+      'createdAt',
+      'roles',
+    });
   });
 
   test('submit omits roles when none are granted', () async {

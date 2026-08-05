@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../models/user_profile.dart';
 import '../models/user_role.dart';
 import '../services/spectrum_auth_service.dart';
-import '../services/user_role_service.dart';
+import '../services/user_role_service_interface.dart';
 
 class UserRoleController extends ChangeNotifier {
   UserRoleController({
@@ -25,9 +25,13 @@ class UserRoleController extends ChangeNotifier {
 
   int _fetchGeneration = 0;
 
+  Object? _rolesError;
+
   Set<UserRole> get roles => Set.unmodifiable(_roles);
 
   String? get currentUid => _currentUid;
+
+  Object? get rolesError => _rolesError;
 
   bool get canManageUsers => _roles.canManageUsers;
 
@@ -36,8 +40,13 @@ class UserRoleController extends ChangeNotifier {
   List<int> get visibleTabIndices => _roles.visibleTabIndices;
 
   Future<void> bootstrap() {
-    _bootstrapFuture ??= _doBootstrap();
-    return _bootstrapFuture!;
+    return _bootstrapFuture ??= _doBootstrap().onError<Object>((
+      error,
+      stackTrace,
+    ) {
+      _bootstrapFuture = null;
+      Error.throwWithStackTrace(error, stackTrace);
+    });
   }
 
   Future<void> _doBootstrap() async {
@@ -50,19 +59,29 @@ class UserRoleController extends ChangeNotifier {
       final user = snapshot.user!;
       _currentUid = user.uid;
       final gen = ++_fetchGeneration;
-      final roles = await _roleService.fetchOrCreateRoles(
-        uid: user.uid,
-        displayName: user.displayName,
-        email: user.email,
-      );
-      if (gen == _fetchGeneration) {
-        _roles = roles;
-        notifyListeners();
+      try {
+        final roles = await _roleService.fetchOrCreateRoles(
+          uid: user.uid,
+          displayName: user.displayName,
+          email: user.email,
+        );
+        if (gen == _fetchGeneration) {
+          _roles = roles;
+          _rolesError = null;
+          notifyListeners();
+        }
+      } catch (error) {
+        if (gen == _fetchGeneration) {
+          _roles = {UserRole.viewer};
+          _rolesError = error;
+          notifyListeners();
+        }
       }
     } else if (snapshot.state == SpectrumAuthState.signedOut) {
       ++_fetchGeneration;
       _currentUid = null;
       _roles = {UserRole.viewer};
+      _rolesError = null;
       notifyListeners();
     }
   }

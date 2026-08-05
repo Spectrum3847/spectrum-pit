@@ -2,6 +2,7 @@ import 'dart:async' show unawaited;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 
 import '../models/inventory_item.dart';
 import '../models/map_location.dart';
@@ -393,6 +394,7 @@ class _MapsTabState extends State<MapsTab> {
         behavior: HitTestBehavior.opaque,
         onTap: () => _openPinDetail(pin),
         onPanUpdate: (details) {
+          if (dest.isEmpty) return;
           final current = _dragPositions[pin.id] ?? Offset(pin.x, pin.y);
           setState(() {
             _dragPositions[pin.id] = Offset(
@@ -651,7 +653,7 @@ class _MapPinEditorSheetState extends State<_MapPinEditorSheet> {
     final existing = widget.pin;
     widget.onSubmit(
       MapLocation(
-        id: existing?.id ?? 'map_${DateTime.now().microsecondsSinceEpoch}',
+        id: existing?.id ?? const Uuid().v4(),
         name: name,
         mapType: widget.mapType,
         x: existing?.x ?? 0.5,

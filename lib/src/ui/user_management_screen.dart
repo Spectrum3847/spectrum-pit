@@ -126,6 +126,8 @@ class _UserProfileTileState extends State<_UserProfileTile> {
     setState(() => _saving = true);
     try {
       await widget.onRolesChanged!(_pendingRoles);
+
+      if (mounted) setState(() => _expanded = false);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -133,12 +135,7 @@ class _UserProfileTileState extends State<_UserProfileTile> {
         ).showSnackBar(SnackBar(content: Text('Failed to save roles: $e')));
       }
     } finally {
-      if (mounted) {
-        setState(() {
-          _saving = false;
-          _expanded = false;
-        });
-      }
+      if (mounted) setState(() => _saving = false);
     }
   }
 

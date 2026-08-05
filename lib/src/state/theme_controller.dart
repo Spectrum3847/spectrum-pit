@@ -12,19 +12,29 @@ class ThemeController extends ChangeNotifier {
   ThemeMode get themeMode => _themeMode;
 
   Future<void> bootstrap() {
-    _bootstrapFuture ??= _bootstrap();
-    return _bootstrapFuture!;
+    return _bootstrapFuture ??= _bootstrap().onError<Object>((
+      error,
+      stackTrace,
+    ) {
+      _bootstrapFuture = null;
+      Error.throwWithStackTrace(error, stackTrace);
+    });
   }
 
   Future<void> _bootstrap() async {
-    final prefs = await SharedPreferences.getInstance();
-    final stored = prefs.getString(_kThemeModeKey);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final stored = prefs.getString(_kThemeModeKey);
 
-    _themeMode = ThemeMode.values.firstWhere(
-      (mode) => mode.name == stored,
-      orElse: () => ThemeMode.system,
-    );
-    notifyListeners();
+      _themeMode = ThemeMode.values.firstWhere(
+        (mode) => mode.name == stored,
+        orElse: () => ThemeMode.system,
+      );
+      notifyListeners();
+    } catch (_) {
+      _bootstrapFuture = null;
+      rethrow;
+    }
   }
 
   Future<void> setThemeMode(ThemeMode mode) async {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:spectrumpit/src/models/user_role.dart';
 import 'package:spectrumpit/src/ui/docs_viewer_screen.dart';
@@ -64,7 +65,9 @@ void main() {
     // doc title shows in the app bar.
     expect(find.text('Start here'), findsNothing);
     expect(find.widgetWithText(AppBar, 'Overview'), findsOneWidget);
-    // The asset finished loading (not stuck on the spinner).
+    // The asset finished loading: no spinner, and the Markdown actually
+    // rendered (not stuck on a loading or error state).
     expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byType(Markdown), findsOneWidget);
   });
 }

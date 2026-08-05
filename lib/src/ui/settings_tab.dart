@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart'
-    show defaultTargetPlatform, kIsWeb, TargetPlatform;
+    show debugPrint, defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:url_launcher/url_launcher.dart';
@@ -132,7 +132,11 @@ class _SettingsTabState extends State<SettingsTab> {
       );
       _showReportSnack('Report sent. Thank you.');
     } catch (e) {
-      _showReportSnack('Could not send the report: $e', isError: true);
+      debugPrint('Bug report submit failed: $e');
+      _showReportSnack(
+        'Could not send the report. Please try again.',
+        isError: true,
+      );
     }
   }
 
@@ -368,7 +372,9 @@ class _DesktopUpdateTileState extends State<_DesktopUpdateTile> {
   DesktopUpdateInfo? _update;
 
   bool get _canInstall =>
-      _update?.appImageUrl != null && _selfUpdate.canSelfUpdate;
+      _update?.appImageUrl != null &&
+      _update?.expectedSha256 != null &&
+      _selfUpdate.canSelfUpdate;
 
   Future<void> _check() async {
     setState(() {
@@ -396,19 +402,26 @@ class _DesktopUpdateTileState extends State<_DesktopUpdateTile> {
   Future<void> _openDownload() async {
     final info = _update;
     if (info == null) return;
-    await launchUrl(info.releaseUrl, mode: LaunchMode.externalApplication);
+    final launched = await launchUrl(
+      info.releaseUrl,
+      mode: LaunchMode.externalApplication,
+    );
+    if (!launched && mounted) {
+      setState(() => _status = 'Could not open the download page.');
+    }
   }
 
   Future<void> _install() async {
     final info = _update;
     final url = info?.appImageUrl;
-    if (url == null) return;
+    final digest = info?.expectedSha256;
+    if (url == null || digest == null) return;
     setState(() {
       _installing = true;
       _status = 'Downloading update...';
     });
     try {
-      await _selfUpdate.update(Uri.parse(url));
+      await _selfUpdate.update(Uri.parse(url), expectedSha256: digest);
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -489,18 +502,34 @@ class _TelemetryTile extends StatefulWidget {
 class _TelemetryTileState extends State<_TelemetryTile> {
   late final TelemetryService _service = widget.service ?? TelemetryService();
   bool _enabled = true;
+  bool _busy = false;
 
   @override
   void initState() {
     super.initState();
-    _service.isEnabled().then((value) {
-      if (mounted) setState(() => _enabled = value);
-    });
+    _service
+        .isEnabled()
+        .then((value) {
+          if (mounted) setState(() => _enabled = value);
+        })
+        .catchError((Object error) {
+          debugPrint('Telemetry preference read failed: $error');
+        });
   }
 
   Future<void> _toggle(bool value) async {
+    if (_busy) return;
+    _busy = true;
+    final previous = _enabled;
     setState(() => _enabled = value);
-    await _service.setEnabled(value);
+    try {
+      await _service.setEnabled(value);
+    } catch (error) {
+      debugPrint('Telemetry preference write failed: $error');
+      if (mounted) setState(() => _enabled = previous);
+    } finally {
+      _busy = false;
+    }
   }
 
   @override

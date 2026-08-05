@@ -7,6 +7,23 @@ import 'support/fake_spectrum_auth_service.dart';
 import 'support/fake_user_role_service.dart';
 
 void main() {
+  // Named tab identifiers from the model, so the expectations stay aligned
+  // with shell routing instead of bare numbers.
+  const featureTabs = [
+    AppTabs.inventory,
+    AppTabs.packing,
+    AppTabs.borrowed,
+    AppTabs.maps,
+    AppTabs.schedule,
+  ];
+  const pitTabs = [...featureTabs, AppTabs.docs, AppTabs.settings];
+  const adminTabs = [
+    ...featureTabs,
+    AppTabs.docs,
+    AppTabs.users,
+    AppTabs.settings,
+  ];
+
   group('UserRole.fromString', () {
     test('parses known role strings', () {
       expect(UserRole.fromString('viewer'), UserRole.viewer);
@@ -46,7 +63,7 @@ void main() {
     });
 
     test('pit: feature tabs + Docs + Settings', () {
-      expect({UserRole.pit}.visibleTabIndices, [0, 1, 2, 3, 4, 5, 7]);
+      expect({UserRole.pit}.visibleTabIndices, pitTabs);
     });
 
     // isMember gates the in-app problem-reporting surface (#438): everyone
@@ -61,20 +78,20 @@ void main() {
 
     test('admin: all tabs including Users, canManageUsers', () {
       final roles = {UserRole.admin};
-      expect(roles.visibleTabIndices, [0, 1, 2, 3, 4, 5, 6, 7]);
+      expect(roles.visibleTabIndices, adminTabs);
       expect(roles.canManageUsers, isTrue);
     });
 
     test('developer: feature tabs + Docs + Settings, no Users, isDebug', () {
       final roles = {UserRole.developer};
-      expect(roles.visibleTabIndices, [0, 1, 2, 3, 4, 5, 7]);
+      expect(roles.visibleTabIndices, pitTabs);
       expect(roles.isDebug, isTrue);
       expect(roles.canManageUsers, isFalse);
     });
 
     test('multi-role union: pit + admin = all tabs', () {
       final roles = {UserRole.pit, UserRole.admin};
-      expect(roles.visibleTabIndices, [0, 1, 2, 3, 4, 5, 6, 7]);
+      expect(roles.visibleTabIndices, adminTabs);
       expect(roles.canManageUsers, isTrue);
     });
 
@@ -82,7 +99,7 @@ void main() {
       'multi-role union: admin + developer = all tabs + isDebug + canManage',
       () {
         final roles = {UserRole.admin, UserRole.developer};
-        expect(roles.visibleTabIndices, [0, 1, 2, 3, 4, 5, 6, 7]);
+        expect(roles.visibleTabIndices, adminTabs);
         expect(roles.canManageUsers, isTrue);
         expect(roles.isDebug, isTrue);
       },
@@ -248,8 +265,8 @@ void main() {
         await controller.bootstrap();
         await Future<void>.delayed(Duration.zero);
 
-        expect(
-          () => controller.updateUserRoles('uid-x', {UserRole.pit}),
+        await expectLater(
+          controller.updateUserRoles('uid-x', {UserRole.pit}),
           throwsStateError,
         );
         controller.dispose();
@@ -268,8 +285,8 @@ void main() {
       await controller.bootstrap();
       await Future<void>.delayed(Duration.zero);
 
-      expect(
-        () => controller.updateUserRoles('uid-admin', {UserRole.viewer}),
+      await expectLater(
+        controller.updateUserRoles('uid-admin', {UserRole.viewer}),
         throwsStateError,
       );
       controller.dispose();

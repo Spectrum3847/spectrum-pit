@@ -85,10 +85,17 @@ class SyncedMapImageStore implements MapImageStore {
     key ??= (await SharedPreferences.getInstance()).getString(
       _prefsKey(mapType, _prefsR2Key),
     );
-    if (key != null && key.isNotEmpty) {
-      await photoService.delete(key);
+
+    var pointerCleared = false;
+    try {
+      await diagramSync.clearKey(mapType);
+      pointerCleared = true;
+    } catch (_) {}
+    if (pointerCleared && key != null && key.isNotEmpty) {
+      try {
+        await photoService.delete(key);
+      } catch (_) {}
     }
-    await diagramSync.clearKey(mapType);
     final prefs = await SharedPreferences.getInstance();
     final file = await _cachedFile(mapType);
     if (file != null) {
@@ -146,8 +153,18 @@ class SyncedMapImageStore implements MapImageStore {
   static Future<Size> _decodeSize(File file) async {
     final bytes = await file.readAsBytes();
     final codec = await ui.instantiateImageCodec(bytes);
-    final frame = await codec.getNextFrame();
-    return Size(frame.image.width.toDouble(), frame.image.height.toDouble());
+    try {
+      final frame = await codec.getNextFrame();
+      final size = Size(
+        frame.image.width.toDouble(),
+        frame.image.height.toDouble(),
+      );
+
+      frame.image.dispose();
+      return size;
+    } finally {
+      codec.dispose();
+    }
   }
 
   String _prefsKey(MapType mapType, String prefix) => '$prefix${mapType.name}';

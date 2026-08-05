@@ -35,11 +35,13 @@ Future<BorrowController> _makeController({
   List<BorrowRecord> initial = const [],
 }) async {
   SharedPreferences.setMockInitialValues({});
-  final sync = FakeBorrowSyncService();
+  sync = FakeBorrowSyncService();
   final controller = BorrowController(
     authService: FakeSpectrumAuthService(initialUser: _user),
     syncService: sync,
   );
+  // Cleanup runs even when an expectation fails later.
+  addTearDown(controller.dispose);
   await controller.bootstrap();
   if (initial.isNotEmpty) sync.emit(initial);
   return controller;
@@ -48,6 +50,8 @@ Future<BorrowController> _makeController({
 Widget _wrap(BorrowController controller) => MaterialApp(
   home: Scaffold(body: BorrowTab(controller: controller)),
 );
+
+late FakeBorrowSyncService sync;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -61,7 +65,6 @@ void main() {
 
     expect(find.text('No tools on loan'), findsOneWidget);
     expect(find.text('Check out tool'), findsWidgets);
-    controller.dispose();
   });
 
   testWidgets('items are displayed with tool name and team', (tester) async {
@@ -73,7 +76,6 @@ void main() {
 
     expect(find.text('Drill'), findsOneWidget);
     expect(find.text('254'), findsOneWidget);
-    controller.dispose();
   });
 
   testWidgets('active loan shows Check in button', (tester) async {
@@ -84,7 +86,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Check in'), findsOneWidget);
-    controller.dispose();
   });
 
   testWidgets('returned loan shows Returned chip', (tester) async {
@@ -96,7 +97,6 @@ void main() {
 
     expect(find.text('Returned'), findsOneWidget);
     expect(find.text('Check in'), findsNothing);
-    controller.dispose();
   });
 
   testWidgets('tapping Check in marks the record as returned', (tester) async {
@@ -111,7 +111,7 @@ void main() {
 
     expect(controller.items.single.returned, isTrue);
     expect(controller.items.single.checkedInAt, isNotNull);
-    controller.dispose();
+    expect(sync.upserts, isNotEmpty);
   });
 
   testWidgets('FAB opens the checkout editor', (tester) async {
@@ -125,7 +125,6 @@ void main() {
     expect(find.text('Check out tool'), findsWidgets);
     // Should have text fields for tool name, team name, team number, competition
     expect(find.byType(TextField), findsNWidgets(4));
-    controller.dispose();
   });
 
   testWidgets('checkout editor creates a new record', (tester) async {
@@ -149,7 +148,7 @@ void main() {
     expect(controller.items.length, 1);
     expect(controller.items.single.toolName, 'Wrench');
     expect(controller.items.single.teamNumber, 254);
-    controller.dispose();
+    expect(sync.upserts, isNotEmpty);
   });
 
   testWidgets('tapping a row opens the edit editor', (tester) async {
@@ -164,7 +163,6 @@ void main() {
 
     expect(find.text('Edit loan'), findsOneWidget);
     expect(find.byIcon(Icons.delete_outline_rounded), findsOneWidget);
-    controller.dispose();
   });
 
   testWidgets('delete button removes the record', (tester) async {
@@ -180,12 +178,13 @@ void main() {
     await tester.tap(find.byIcon(Icons.delete_outline_rounded));
     await tester.pumpAndSettle();
 
-    // Confirm dialog
-    await tester.tap(find.text('Delete'));
+    // Confirm dialog: the Delete action is the dialog's FilledButton, not the
+    // sheet's delete icon (whose tooltip is also 'Delete').
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
     await tester.pumpAndSettle();
 
     expect(controller.items, isEmpty);
-    controller.dispose();
+    expect(sync.deletes, ['a']);
   });
 
   testWidgets('overdue loan shows Overdue chip', (tester) async {
@@ -203,7 +202,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Overdue'), findsOneWidget);
-    controller.dispose();
   });
 
   testWidgets('active loans sort above returned ones', (tester) async {
@@ -226,6 +224,5 @@ void main() {
     final activeBox = tester.getCenter(activeFinder);
     final returnedBox = tester.getCenter(returnedFinder);
     expect(activeBox.dy, lessThan(returnedBox.dy));
-    controller.dispose();
   });
 }

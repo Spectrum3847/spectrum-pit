@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 
 import '../models/inventory_item.dart';
 import '../state/inventory_controller.dart';
@@ -203,14 +204,13 @@ IconData _statusIcon(InventoryStatus status) => switch (status) {
 };
 
 Color? _statusColor(BuildContext context, InventoryStatus status) {
-  final dark = Theme.of(context).brightness == Brightness.dark;
   switch (status) {
     case InventoryStatus.inLab:
       return null;
     case InventoryStatus.inPit:
-      return dark ? PitPalette.statusReady : PitPalette.lightStatusReady;
+      return PitPalette.statusReadyOf(context);
     case InventoryStatus.borrowed:
-      return dark ? PitPalette.statusPacking : PitPalette.lightStatusPacking;
+      return PitPalette.statusPackingOf(context);
   }
 }
 
@@ -487,7 +487,7 @@ class _ItemEditorSheetState extends State<_ItemEditorSheet> {
     final map = _mapRef.text.trim();
     widget.onSubmit(
       InventoryItem(
-        id: existing?.id ?? 'inv_${DateTime.now().microsecondsSinceEpoch}',
+        id: existing?.id ?? const Uuid().v4(),
         name: name,
         labLocation: _lab.text.trim(),
         pitLocation: _pit.text.trim(),
