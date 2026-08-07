@@ -75,7 +75,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Drill'), findsOneWidget);
-    expect(find.text('254'), findsOneWidget);
+    // The team line is one rich paragraph so it can wrap at large text
+    // settings (#193), so the number lives in a span rather than its own Text.
+    expect(find.textContaining('254', findRichText: true), findsOneWidget);
   });
 
   testWidgets('active loan shows Check in button', (tester) async {

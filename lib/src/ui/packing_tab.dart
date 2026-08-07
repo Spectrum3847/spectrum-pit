@@ -9,6 +9,7 @@ import '../services/photo_service.dart';
 import '../state/packing_controller.dart';
 import '../theme/pit_palette.dart';
 import 'packing_photo.dart';
+import '../widgets/keyboard_shortcuts.dart';
 
 class PackingTab extends StatefulWidget {
   const PackingTab({
@@ -207,6 +208,8 @@ class _PackingTabState extends State<PackingTab> {
                 if (deleted && photoRef != null) {
                   await _deleteKey(photoRef, record.itemId);
                 }
+
+                if (!deleted) return;
                 if (sheetContext.mounted) Navigator.of(sheetContext).pop();
               },
       ),
@@ -864,83 +867,87 @@ class _RecordEditorSheetState extends State<_RecordEditorSheet> {
   @override
   Widget build(BuildContext context) {
     final editing = widget.record != null;
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
-        top: 16,
-        bottom: 16 + MediaQuery.of(context).viewInsets.bottom,
-      ),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    editing ? 'Edit packing item' : 'Add packing item',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                ),
-                if (widget.onDelete != null)
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline_rounded),
-                    tooltip: 'Delete',
-                    onPressed: widget.onDelete,
-                  ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _itemId,
-              autofocus: !editing,
-              textCapitalization: TextCapitalization.sentences,
-              onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(
-                labelText: 'Item name',
-                hintText: 'DeWalt Drill Kit',
-              ),
-            ),
-            const SizedBox(height: 16),
-            _PhotoSection(
-              photoRef: _photoRef,
-              photoService: widget.photoService,
-              busy: _busy,
-              size: _photoSize,
-              onTap: _capturePhoto,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Packing status',
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                color: PitPalette.inkMutedOf(context),
-              ),
-            ),
-            const SizedBox(height: 8),
-            SegmentedButton<PackingStatus>(
-              segments: [
-                for (final status in PackingStatus.values)
-                  ButtonSegment<PackingStatus>(
-                    value: status,
 
-                    label: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(_statusLabel(status), softWrap: false),
+    return SaveShortcut(
+      onSave: _save,
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          top: 16,
+          bottom: 16 + MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      editing ? 'Edit packing item' : 'Add packing item',
+                      style: Theme.of(context).textTheme.titleLarge,
                     ),
-                    icon: Icon(_statusIcon(status)),
                   ),
-              ],
-              selected: {_status},
-              onSelectionChanged: (s) => setState(() => _status = s.first),
-            ),
-            const SizedBox(height: 20),
-            FilledButton(
-              onPressed: _itemId.text.trim().isEmpty ? null : _save,
-              child: Text(editing ? 'Save' : 'Add item'),
-            ),
-          ],
+                  if (widget.onDelete != null)
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline_rounded),
+                      tooltip: 'Delete',
+                      onPressed: widget.onDelete,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _itemId,
+                autofocus: !editing,
+                textCapitalization: TextCapitalization.sentences,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(
+                  labelText: 'Item name',
+                  hintText: 'DeWalt Drill Kit',
+                ),
+              ),
+              const SizedBox(height: 16),
+              _PhotoSection(
+                photoRef: _photoRef,
+                photoService: widget.photoService,
+                busy: _busy,
+                size: _photoSize,
+                onTap: _capturePhoto,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Packing status',
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: PitPalette.inkMutedOf(context),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SegmentedButton<PackingStatus>(
+                segments: [
+                  for (final status in PackingStatus.values)
+                    ButtonSegment<PackingStatus>(
+                      value: status,
+
+                      label: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(_statusLabel(status), softWrap: false),
+                      ),
+                      icon: Icon(_statusIcon(status)),
+                    ),
+                ],
+                selected: {_status},
+                onSelectionChanged: (s) => setState(() => _status = s.first),
+              ),
+              const SizedBox(height: 20),
+              FilledButton(
+                onPressed: _itemId.text.trim().isEmpty ? null : _save,
+                child: Text(editing ? 'Save' : 'Add item'),
+              ),
+            ],
+          ),
         ),
       ),
     );

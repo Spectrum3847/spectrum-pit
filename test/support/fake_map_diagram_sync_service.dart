@@ -14,12 +14,20 @@ class FakeMapDiagramSyncService implements MapDiagramSyncService {
     Object? writeFailure,
     Object? clearFailure,
     this.onWriteKey,
-  }) : _readKeyValue = readKeyValue,
-       _readFailure = readFailure,
+  }) : _readFailure = readFailure,
        _writeFailure = writeFailure,
-       _clearFailure = clearFailure;
+       _clearFailure = clearFailure {
+    if (readKeyValue != null) {
+      for (final mapType in MapType.values) {
+        _readKeyValues[mapType] = readKeyValue;
+      }
+    }
+  }
 
-  String? _readKeyValue;
+  /// Keyed by map type, the way Firestore keys the real documents. A single
+  /// shared value let a lab write change what a pit read returned, so a
+  /// cross-map isolation defect would have passed (#184).
+  final Map<MapType, String?> _readKeyValues = <MapType, String?>{};
   final Object? _readFailure;
   final Object? _writeFailure;
   final Object? _clearFailure;
@@ -38,7 +46,7 @@ class FakeMapDiagramSyncService implements MapDiagramSyncService {
   @override
   Future<String?> readKey(MapType mapType) async {
     if (_readFailure != null) throw _readFailure;
-    return _readKeyValue;
+    return _readKeyValues[mapType];
   }
 
   @override
@@ -50,7 +58,7 @@ class FakeMapDiagramSyncService implements MapDiagramSyncService {
     // already did the mirror of this; without it the fake reported a stale key
     // after a successful write and no test could catch a read-after-write
     // mistake (#169). A failed write deliberately does not update it.
-    _readKeyValue = key;
+    _readKeyValues[mapType] = key;
   }
 
   @override
@@ -59,6 +67,6 @@ class FakeMapDiagramSyncService implements MapDiagramSyncService {
     if (_clearFailure != null) throw _clearFailure;
     // Clear the stored pointer so a later readKey reflects the cleared state,
     // rather than leaving diagramFor to discover a deleted object by 404.
-    _readKeyValue = null;
+    _readKeyValues[mapType] = null;
   }
 }

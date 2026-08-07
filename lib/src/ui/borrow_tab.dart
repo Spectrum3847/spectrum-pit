@@ -7,6 +7,7 @@ import '../models/borrow_record.dart';
 import '../state/borrow_controller.dart';
 import '../theme/app_theme.dart';
 import '../theme/pit_palette.dart';
+import '../widgets/keyboard_shortcuts.dart';
 
 class BorrowTab extends StatefulWidget {
   const BorrowTab({required this.controller, super.key});
@@ -245,28 +246,29 @@ class _TeamLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final muted = PitPalette.inkMutedOf(context);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          'Team',
-          style: Theme.of(context).textTheme.labelLarge?.copyWith(color: muted),
-        ),
-        const SizedBox(width: 6),
-        Text(
-          number.toString(),
-          style: pitCodeStyle(context, color: PitPalette.inkOf(context)),
-        ),
-        if (name.isNotEmpty) ...[
-          const SizedBox(width: 4),
-          Text(
-            name,
+
+    return Text.rich(
+      TextSpan(
+        children: <InlineSpan>[
+          TextSpan(
+            text: 'Team ',
             style: Theme.of(
               context,
-            ).textTheme.bodyMedium?.copyWith(color: muted),
+            ).textTheme.labelLarge?.copyWith(color: muted),
           ),
+          TextSpan(
+            text: number.toString(),
+            style: pitCodeStyle(context, color: PitPalette.inkOf(context)),
+          ),
+          if (name.isNotEmpty)
+            TextSpan(
+              text: ' $name',
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: muted),
+            ),
         ],
-      ],
+      ),
     );
   }
 }
@@ -279,16 +281,21 @@ class _CompetitionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final muted = PitPalette.inkMutedOf(context);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(Icons.emoji_events_outlined, size: 14, color: muted),
-        const SizedBox(width: 4),
-        Text(
-          name,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: muted),
-        ),
-      ],
+
+    return Text.rich(
+      TextSpan(
+        children: <InlineSpan>[
+          WidgetSpan(
+            alignment: PlaceholderAlignment.middle,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Icon(Icons.emoji_events_outlined, size: 14, color: muted),
+            ),
+          ),
+          TextSpan(text: name),
+        ],
+      ),
+      style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: muted),
     );
   }
 }
@@ -341,16 +348,21 @@ class _TimestampLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          label,
-          style: Theme.of(context).textTheme.labelLarge?.copyWith(color: color),
-        ),
-        const SizedBox(width: 6),
-        Text(value, style: pitCodeStyle(context, color: color)),
-      ],
+    return Text.rich(
+      TextSpan(
+        children: <InlineSpan>[
+          TextSpan(
+            text: '$label ',
+            style: Theme.of(
+              context,
+            ).textTheme.labelLarge?.copyWith(color: color),
+          ),
+          TextSpan(
+            text: value,
+            style: pitCodeStyle(context, color: color),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -650,108 +662,112 @@ class _BorrowEditorSheetState extends State<_BorrowEditorSheet> {
   Widget build(BuildContext context) {
     final editing = widget.record != null;
     final muted = PitPalette.inkMutedOf(context);
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
-        top: 16,
-        bottom: 16 + MediaQuery.of(context).viewInsets.bottom,
-      ),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    editing ? 'Edit loan' : 'Check out tool',
-                    style: Theme.of(context).textTheme.titleLarge,
+
+    return SaveShortcut(
+      onSave: _save,
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          top: 16,
+          bottom: 16 + MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      editing ? 'Edit loan' : 'Check out tool',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
                   ),
+                  if (widget.onDelete != null)
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline_rounded),
+                      tooltip: 'Delete',
+                      onPressed: widget.onDelete,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _toolName,
+                autofocus: !editing,
+                textCapitalization: TextCapitalization.sentences,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(
+                  labelText: 'Tool name',
+                  hintText: 'Cordless drill',
                 ),
-                if (widget.onDelete != null)
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline_rounded),
-                    tooltip: 'Delete',
-                    onPressed: widget.onDelete,
-                  ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _toolName,
-              autofocus: !editing,
-              textCapitalization: TextCapitalization.sentences,
-              onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(
-                labelText: 'Tool name',
-                hintText: 'Cordless drill',
               ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _teamName,
-              textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(
-                labelText: 'Team name',
-                hintText: 'The Cheesy Poofs',
+              const SizedBox(height: 12),
+              TextField(
+                controller: _teamName,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(
+                  labelText: 'Team name',
+                  hintText: 'The Cheesy Poofs',
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _teamNumber,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Team number',
-                hintText: '254',
+              const SizedBox(height: 12),
+              TextField(
+                controller: _teamNumber,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Team number',
+                  hintText: '254',
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _competition,
-              textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(
-                labelText: 'Competition',
-                hintText: 'Texas State Championship',
+              const SizedBox(height: 12),
+              TextField(
+                controller: _competition,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(
+                  labelText: 'Competition',
+                  hintText: 'Texas State Championship',
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Checkout time',
-              style: Theme.of(
-                context,
-              ).textTheme.labelLarge?.copyWith(color: muted),
-            ),
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: _pickCheckoutDate,
-              icon: const Icon(Icons.calendar_today_outlined),
-              label: Text(_shortDateTime(_checkedOutAt)),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Estimated return (optional)',
-              style: Theme.of(
-                context,
-              ).textTheme.labelLarge?.copyWith(color: muted),
-            ),
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: _pickEstimatedReturn,
-              icon: const Icon(Icons.schedule_outlined),
-              label: Text(
-                _estimatedReturn != null
-                    ? _shortDateTime(_estimatedReturn!)
-                    : 'Set date',
+              const SizedBox(height: 16),
+              Text(
+                'Checkout time',
+                style: Theme.of(
+                  context,
+                ).textTheme.labelLarge?.copyWith(color: muted),
               ),
-            ),
-            const SizedBox(height: 20),
-            FilledButton(
-              onPressed: _toolName.text.trim().isEmpty ? null : _save,
-              child: Text(editing ? 'Save' : 'Check out'),
-            ),
-          ],
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: _pickCheckoutDate,
+                icon: const Icon(Icons.calendar_today_outlined),
+                label: Text(_shortDateTime(_checkedOutAt)),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Estimated return (optional)',
+                style: Theme.of(
+                  context,
+                ).textTheme.labelLarge?.copyWith(color: muted),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: _pickEstimatedReturn,
+                icon: const Icon(Icons.schedule_outlined),
+                label: Text(
+                  _estimatedReturn != null
+                      ? _shortDateTime(_estimatedReturn!)
+                      : 'Set date',
+                ),
+              ),
+              const SizedBox(height: 20),
+              FilledButton(
+                onPressed: _toolName.text.trim().isEmpty ? null : _save,
+                child: Text(editing ? 'Save' : 'Check out'),
+              ),
+            ],
+          ),
         ),
       ),
     );

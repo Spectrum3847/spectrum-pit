@@ -108,6 +108,9 @@ class PhotoService {
       throw const PhotoException('Storage did not return a photo id.');
     }
     _remember(key, photo.bytes);
+
+    final disk = _diskCache;
+    if (disk != null) unawaited(disk.write(key, photo.bytes));
     return key;
   }
 

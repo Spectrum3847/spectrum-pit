@@ -45,8 +45,12 @@ PhotoService fakePhotoService({
       // The Worker authenticates every request with the caller's Bearer token;
       // simulate that gate so an unauthenticated request cannot hit the
       // storage logic.
-      final expected = token == null ? null : 'Bearer $token';
-      if (request.headers['Authorization'] != expected) {
+      // A request with no Authorization header is rejected even when the fake
+      // has no token: the Worker gates on the header being present and valid,
+      // so accepting a missing one let an unauthenticated call reach the
+      // storage logic in a test and pass (#184).
+      if (token == null ||
+          request.headers['Authorization'] != 'Bearer $token') {
         return http.Response('{"error":"Unauthorized"}', 401);
       }
       if (respond != null) return respond(request);

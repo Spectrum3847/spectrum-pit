@@ -7,6 +7,7 @@ import '../models/inventory_item.dart';
 import '../state/inventory_controller.dart';
 import '../theme/pit_palette.dart';
 import 'location_code.dart';
+import '../widgets/keyboard_shortcuts.dart';
 
 class InventoryTab extends StatefulWidget {
   const InventoryTab({required this.controller, super.key});
@@ -501,96 +502,100 @@ class _ItemEditorSheetState extends State<_ItemEditorSheet> {
   @override
   Widget build(BuildContext context) {
     final editing = widget.item != null;
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
-        top: 16,
-        bottom: 16 + MediaQuery.of(context).viewInsets.bottom,
-      ),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    editing ? 'Edit tool' : 'Add tool',
-                    style: Theme.of(context).textTheme.titleLarge,
+
+    return SaveShortcut(
+      onSave: _save,
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          top: 16,
+          bottom: 16 + MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      editing ? 'Edit tool' : 'Add tool',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
                   ),
+                  if (widget.onDelete != null)
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline_rounded),
+                      tooltip: 'Delete',
+                      onPressed: widget.onDelete,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _name,
+                autofocus: !editing,
+                textCapitalization: TextCapitalization.sentences,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(
+                  labelText: 'Name',
+                  hintText: 'Cordless drill',
                 ),
-                if (widget.onDelete != null)
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline_rounded),
-                    tooltip: 'Delete',
-                    onPressed: widget.onDelete,
-                  ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _name,
-              autofocus: !editing,
-              textCapitalization: TextCapitalization.sentences,
-              onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(
-                labelText: 'Name',
-                hintText: 'Cordless drill',
               ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _lab,
-              textCapitalization: TextCapitalization.characters,
-              decoration: const InputDecoration(
-                labelText: 'Lab location',
-                hintText: 'RC1-DB',
+              const SizedBox(height: 12),
+              TextField(
+                controller: _lab,
+                textCapitalization: TextCapitalization.characters,
+                decoration: const InputDecoration(
+                  labelText: 'Lab location',
+                  hintText: 'RC1-DB',
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _pit,
-              textCapitalization: TextCapitalization.characters,
-              decoration: const InputDecoration(
-                labelText: 'Pit location',
-                hintText: 'CAB-A2',
+              const SizedBox(height: 12),
+              TextField(
+                controller: _pit,
+                textCapitalization: TextCapitalization.characters,
+                decoration: const InputDecoration(
+                  labelText: 'Pit location',
+                  hintText: 'CAB-A2',
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _mapRef,
-              decoration: const InputDecoration(
-                labelText: 'Map reference (optional)',
+              const SizedBox(height: 12),
+              TextField(
+                controller: _mapRef,
+                decoration: const InputDecoration(
+                  labelText: 'Map reference (optional)',
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Status',
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                color: PitPalette.inkMutedOf(context),
+              const SizedBox(height: 16),
+              Text(
+                'Status',
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: PitPalette.inkMutedOf(context),
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            SegmentedButton<InventoryStatus>(
-              segments: [
-                for (final status in InventoryStatus.values)
-                  ButtonSegment<InventoryStatus>(
-                    value: status,
-                    label: Text(_statusLabel(status)),
-                    icon: Icon(_statusIcon(status)),
-                  ),
-              ],
-              selected: {_status},
-              onSelectionChanged: (s) => setState(() => _status = s.first),
-            ),
-            const SizedBox(height: 20),
-            FilledButton(
-              onPressed: _name.text.trim().isEmpty ? null : _save,
-              child: Text(editing ? 'Save' : 'Add tool'),
-            ),
-          ],
+              const SizedBox(height: 8),
+              SegmentedButton<InventoryStatus>(
+                segments: [
+                  for (final status in InventoryStatus.values)
+                    ButtonSegment<InventoryStatus>(
+                      value: status,
+                      label: Text(_statusLabel(status)),
+                      icon: Icon(_statusIcon(status)),
+                    ),
+                ],
+                selected: {_status},
+                onSelectionChanged: (s) => setState(() => _status = s.first),
+              ),
+              const SizedBox(height: 20),
+              FilledButton(
+                onPressed: _name.text.trim().isEmpty ? null : _save,
+                child: Text(editing ? 'Save' : 'Add tool'),
+              ),
+            ],
+          ),
         ),
       ),
     );

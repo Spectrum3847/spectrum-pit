@@ -91,4 +91,32 @@ void main() {
 
     await expectLater(service.registerInLauncher(), throwsStateError);
   });
+
+  // #202: quoting the Exec path is not enough on its own. A path holding a $ or
+  // a backtick is reinterpreted by the launcher, and a literal % is read as the
+  // start of a field code.
+  test('desktopEntry escapes reserved characters in the Exec path', () {
+    final entry = DesktopLauncherService.desktopEntry(
+      r'/home/a$b/`c`/d"e"/f\g/App.AppImage',
+    );
+
+    // Each reserved character takes two backslashes, because the entry's string
+    // escaping is undone before the Exec quoting is. The embedded quotes matter
+    // most: an unescaped `"` would close the Exec value early and the launcher
+    // would read the rest of the path as separate arguments.
+    expect(
+      entry,
+      contains(r'Exec="/home/a\\$b/\\`c\\`/d\\"e\\"/f\\\\g/App.AppImage" %U'),
+    );
+    // %U is a field code the launcher must still expand, so it stays bare.
+    expect(entry, contains(' %U'));
+  });
+
+  test('desktopEntry doubles a literal percent in the Exec path', () {
+    final entry = DesktopLauncherService.desktopEntry(
+      '/home/u/100% Done/App.AppImage',
+    );
+
+    expect(entry, contains('Exec="/home/u/100%% Done/App.AppImage" %U'));
+  });
 }

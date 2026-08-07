@@ -21,11 +21,14 @@ class LocationCode extends StatelessWidget {
           style: Theme.of(context).textTheme.labelLarge?.copyWith(color: muted),
         ),
         const SizedBox(width: 6),
-        Text(
-          value.isEmpty ? '--' : value.toUpperCase(),
-          style: pitCodeStyle(
-            context,
-            color: value.isEmpty ? muted : PitPalette.inkOf(context),
+
+        Flexible(
+          child: Text(
+            value.isEmpty ? '--' : value.toUpperCase(),
+            style: pitCodeStyle(
+              context,
+              color: value.isEmpty ? muted : PitPalette.inkOf(context),
+            ),
           ),
         ),
       ],

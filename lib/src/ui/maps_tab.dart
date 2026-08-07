@@ -11,6 +11,7 @@ import '../state/inventory_controller.dart';
 import '../state/map_location_controller.dart';
 import '../theme/pit_palette.dart';
 import 'location_code.dart';
+import '../widgets/keyboard_shortcuts.dart';
 
 class MapsTab extends StatefulWidget {
   const MapsTab({
@@ -367,7 +368,15 @@ class _MapsTabState extends State<MapsTab> {
         return Stack(
           children: [
             Positioned.fill(
-              child: Image(image: diagram.image, fit: BoxFit.contain),
+              child: Semantics(
+                image: true,
+                label: pins.isEmpty
+                    ? '${_mapLabel(_mapType)} diagram, no locations marked'
+                    : '${_mapLabel(_mapType)} diagram, '
+                          '${pins.length} location${pins.length == 1 ? '' : 's'} '
+                          'marked',
+                child: Image(image: diagram.image, fit: BoxFit.contain),
+              ),
             ),
             for (final pin in pins) _buildPin(pin, dest),
           ],
@@ -390,41 +399,51 @@ class _MapsTabState extends State<MapsTab> {
     return Positioned(
       left: center.dx - _pinSize / 2 - _pinTouchInset,
       top: center.dy - _pinSize - _pinTouchInset,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
+
+      child: Semantics(
+        button: true,
+        label: pin.inventoryItemId != null
+            ? '${pin.name}, linked to a tool'
+            : '${pin.name}, not linked to a tool',
         onTap: () => _openPinDetail(pin),
-        onPanUpdate: (details) {
-          if (dest.isEmpty) return;
-          final current = _dragPositions[pin.id] ?? Offset(pin.x, pin.y);
-          setState(() {
-            _dragPositions[pin.id] = Offset(
-              (current.dx + details.delta.dx / dest.width)
-                  .clamp(0.0, 1.0)
-                  .toDouble(),
-              (current.dy + details.delta.dy / dest.height)
-                  .clamp(0.0, 1.0)
-                  .toDouble(),
-            );
-          });
-        },
-        onPanEnd: (_) {
-          final fraction = _dragPositions[pin.id];
-          _dragPositions.remove(pin.id);
-          if (fraction != null) _movePin(pin, fraction.dx, fraction.dy);
-        },
-        child: SizedBox(
-          width: _pinTouchSize,
-          height: _pinTouchSize,
-          child: Center(
-            child: _PinGlyph(
-              linked: pin.inventoryItemId != null,
-              size: _pinSize,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => _openPinDetail(pin),
+          onPanUpdate: (details) {
+            if (dest.isEmpty) return;
+            final current = _dragPositions[pin.id] ?? Offset(pin.x, pin.y);
+            setState(() {
+              _dragPositions[pin.id] = Offset(
+                (current.dx + details.delta.dx / dest.width)
+                    .clamp(0.0, 1.0)
+                    .toDouble(),
+                (current.dy + details.delta.dy / dest.height)
+                    .clamp(0.0, 1.0)
+                    .toDouble(),
+              );
+            });
+          },
+          onPanEnd: (_) {
+            final fraction = _dragPositions[pin.id];
+            _dragPositions.remove(pin.id);
+            if (fraction != null) _movePin(pin, fraction.dx, fraction.dy);
+          },
+          child: SizedBox(
+            width: _pinTouchSize,
+            height: _pinTouchSize,
+            child: Center(
+              child: _PinGlyph(
+                linked: pin.inventoryItemId != null,
+                size: _pinSize,
+              ),
             ),
           ),
         ),
       ),
     );
   }
+
+  static String _mapLabel(MapType type) => type == MapType.lab ? 'Lab' : 'Pit';
 }
 
 class _PinGlyph extends StatelessWidget {
@@ -667,50 +686,54 @@ class _MapPinEditorSheetState extends State<_MapPinEditorSheet> {
   @override
   Widget build(BuildContext context) {
     final editing = widget.pin != null;
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
-        top: 16,
-        bottom: 16 + MediaQuery.of(context).viewInsets.bottom,
-      ),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              editing ? 'Edit pin' : 'Add pin',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _name,
-              autofocus: !editing,
-              textCapitalization: TextCapitalization.sentences,
-              onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(
-                labelText: 'Name',
-                hintText: 'Battery cart',
+
+    return SaveShortcut(
+      onSave: _save,
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          top: 16,
+          bottom: 16 + MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                editing ? 'Edit pin' : 'Add pin',
+                style: Theme.of(context).textTheme.titleLarge,
               ),
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String?>(
-              initialValue: _linkedItemId,
-              decoration: const InputDecoration(labelText: 'Linked tool'),
-              items: [
-                const DropdownMenuItem(value: null, child: Text('None')),
-                for (final item in widget.inventoryItems)
-                  DropdownMenuItem(value: item.id, child: Text(item.name)),
-              ],
-              onChanged: (value) => setState(() => _linkedItemId = value),
-            ),
-            const SizedBox(height: 20),
-            FilledButton(
-              onPressed: _name.text.trim().isEmpty ? null : _save,
-              child: Text(editing ? 'Save' : 'Add pin'),
-            ),
-          ],
+              const SizedBox(height: 12),
+              TextField(
+                controller: _name,
+                autofocus: !editing,
+                textCapitalization: TextCapitalization.sentences,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(
+                  labelText: 'Name',
+                  hintText: 'Battery cart',
+                ),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String?>(
+                initialValue: _linkedItemId,
+                decoration: const InputDecoration(labelText: 'Linked tool'),
+                items: [
+                  const DropdownMenuItem(value: null, child: Text('None')),
+                  for (final item in widget.inventoryItems)
+                    DropdownMenuItem(value: item.id, child: Text(item.name)),
+                ],
+                onChanged: (value) => setState(() => _linkedItemId = value),
+              ),
+              const SizedBox(height: 20),
+              FilledButton(
+                onPressed: _name.text.trim().isEmpty ? null : _save,
+                child: Text(editing ? 'Save' : 'Add pin'),
+              ),
+            ],
+          ),
         ),
       ),
     );
