@@ -46,10 +46,12 @@ class DesktopLauncherService {
   }
 
   static String desktopEntry(String appImagePath, {String? iconPath}) {
-    final exec = appImagePath.replaceAllMapped(
-      RegExp(r'["`$\\]'),
-      (m) => '\\${m[0]}',
-    );
+    final exec = appImagePath.replaceAllMapped(RegExp(r'[%"`$\\]'), (m) {
+      final char = m[0]!;
+      if (char == '%') return '%%';
+      if (char == r'\') return r'\\\\';
+      return '\\\\$char';
+    });
     final icon = (iconPath ?? 'spectrumpit')
         .replaceAll('\\', r'\\')
         .replaceAll('\n', r'\n');

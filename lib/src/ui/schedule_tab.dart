@@ -11,6 +11,7 @@ import '../state/pit_shift_controller.dart';
 import '../state/user_role_controller.dart';
 import '../theme/app_theme.dart';
 import '../theme/pit_palette.dart';
+import '../widgets/keyboard_shortcuts.dart';
 
 class ScheduleTab extends StatefulWidget {
   const ScheduleTab({
@@ -884,206 +885,210 @@ class _ShiftEditorSheetState extends State<_ShiftEditorSheet> {
         : editing
         ? 'Edit shift'
         : 'Add shift';
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
-        top: 16,
-        bottom: 16 + MediaQuery.of(context).viewInsets.bottom,
-      ),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    title,
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                ),
-                if (widget.onDelete != null)
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline_rounded),
-                    tooltip: 'Delete',
-                    onPressed: widget.onDelete,
-                  ),
-              ],
-            ),
-            if (_selfOnly) ...[
-              const SizedBox(height: 4),
-              Text(
-                'Nobody else is changed. The crew sees this time as yours, and '
-                'anything scheduled over it is flagged.',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(color: muted),
-              ),
-            ],
-            const SizedBox(height: 12),
-            TextField(
-              controller: _label,
-              autofocus: !editing,
-              textCapitalization: TextCapitalization.sentences,
-              onChanged: (_) => setState(() {}),
-              decoration: InputDecoration(
-                labelText: _selfOnly ? 'Reason' : 'Shift name',
-                hintText: _selfOnly ? 'Driving home' : 'Pit duty, qual block',
-              ),
-            ),
-            if (!_selfOnly) ...[
-              const SizedBox(height: 12),
-              DropdownButtonFormField<ShiftKind>(
-                initialValue: _kind,
-                decoration: const InputDecoration(labelText: 'Type'),
-                items: [
-                  for (final kind in ShiftKind.values)
-                    if (kind != ShiftKind.unavailable)
-                      DropdownMenuItem(
-                        value: kind,
-                        child: Text(_kindLabel(kind)),
-                      ),
-                ],
-                onChanged: (value) {
-                  if (value != null) setState(() => _kind = value);
-                },
-              ),
-            ],
-            const SizedBox(height: 12),
-            TextField(
-              controller: _competition,
-              textCapitalization: TextCapitalization.words,
-              onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(
-                labelText: 'Competition',
-                hintText: 'Texas State Championship',
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Scheduled by',
-              style: Theme.of(
-                context,
-              ).textTheme.labelLarge?.copyWith(color: muted),
-            ),
-            const SizedBox(height: 8),
-            SegmentedButton<_RangeMode>(
-              segments: const [
-                ButtonSegment(
-                  value: _RangeMode.match,
-                  label: Text('Match'),
-                  icon: Icon(Icons.sports_score_outlined),
-                ),
-                ButtonSegment(
-                  value: _RangeMode.time,
-                  label: Text('Time'),
-                  icon: Icon(Icons.schedule_outlined),
-                ),
-              ],
-              selected: {_mode},
-              onSelectionChanged: (s) => setState(() => _mode = s.first),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              _mode == _RangeMode.match
-                  ? 'Match numbers only. Clock times are ignored.'
-                  : 'Clock times only. Match numbers are ignored.',
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: muted),
-            ),
-            const SizedBox(height: 12),
-            if (_mode == _RangeMode.match)
+
+    return SaveShortcut(
+      onSave: _save,
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          top: 16,
+          bottom: 16 + MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
               Row(
                 children: [
                   Expanded(
-                    child: TextField(
-                      controller: _startMatch,
-                      keyboardType: TextInputType.number,
-                      onChanged: (_) => setState(() {}),
-                      decoration: const InputDecoration(
-                        labelText: 'First match',
-                        hintText: '18',
-                      ),
+                    child: Text(
+                      title,
+                      style: Theme.of(context).textTheme.titleLarge,
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: _endMatch,
-                      keyboardType: TextInputType.number,
-                      onChanged: (_) => setState(() {}),
-                      decoration: const InputDecoration(
-                        labelText: 'Last match',
-                        hintText: '34',
-                      ),
+                  if (widget.onDelete != null)
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline_rounded),
+                      tooltip: 'Delete',
+                      onPressed: widget.onDelete,
                     ),
-                  ),
-                ],
-              )
-            else
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: () => _pickBound(start: true),
-                    icon: const Icon(Icons.play_arrow_outlined),
-                    label: Text(
-                      _startsAt == null
-                          ? 'Set start'
-                          : 'Starts ${_shortDateTime(_startsAt!.toLocal())}',
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  OutlinedButton.icon(
-                    onPressed: () => _pickBound(start: false),
-                    icon: const Icon(Icons.stop_outlined),
-                    label: Text(
-                      _endsAt == null
-                          ? 'Set end'
-                          : 'Ends ${_shortDateTime(_endsAt!.toLocal())}',
-                    ),
-                  ),
                 ],
               ),
-            if (!_selfOnly) ...[
+              if (_selfOnly) ...[
+                const SizedBox(height: 4),
+                Text(
+                  'Nobody else is changed. The crew sees this time as yours, and '
+                  'anything scheduled over it is flagged.',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(color: muted),
+                ),
+              ],
+              const SizedBox(height: 12),
+              TextField(
+                controller: _label,
+                autofocus: !editing,
+                textCapitalization: TextCapitalization.sentences,
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  labelText: _selfOnly ? 'Reason' : 'Shift name',
+                  hintText: _selfOnly ? 'Driving home' : 'Pit duty, qual block',
+                ),
+              ),
+              if (!_selfOnly) ...[
+                const SizedBox(height: 12),
+                DropdownButtonFormField<ShiftKind>(
+                  initialValue: _kind,
+                  decoration: const InputDecoration(labelText: 'Type'),
+                  items: [
+                    for (final kind in ShiftKind.values)
+                      if (kind != ShiftKind.unavailable)
+                        DropdownMenuItem(
+                          value: kind,
+                          child: Text(_kindLabel(kind)),
+                        ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) setState(() => _kind = value);
+                  },
+                ),
+              ],
+              const SizedBox(height: 12),
+              TextField(
+                controller: _competition,
+                textCapitalization: TextCapitalization.words,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(
+                  labelText: 'Competition',
+                  hintText: 'Texas State Championship',
+                ),
+              ),
               const SizedBox(height: 16),
               Text(
-                'Assigned to',
+                'Scheduled by',
                 style: Theme.of(
                   context,
                 ).textTheme.labelLarge?.copyWith(color: muted),
               ),
               const SizedBox(height: 8),
-              _AssigneePicker(
-                known: widget.knownAssignees,
-                rosterStream: widget.rosterStream,
-                selected: _selected,
-                onChanged: (next) => setState(() => _selected = next),
+              SegmentedButton<_RangeMode>(
+                segments: const [
+                  ButtonSegment(
+                    value: _RangeMode.match,
+                    label: Text('Match'),
+                    icon: Icon(Icons.sports_score_outlined),
+                  ),
+                  ButtonSegment(
+                    value: _RangeMode.time,
+                    label: Text('Time'),
+                    icon: Icon(Icons.schedule_outlined),
+                  ),
+                ],
+                selected: {_mode},
+                onSelectionChanged: (s) => setState(() => _mode = s.first),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                _mode == _RangeMode.match
+                    ? 'Match numbers only. Clock times are ignored.'
+                    : 'Clock times only. Match numbers are ignored.',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: muted),
+              ),
+              const SizedBox(height: 12),
+              if (_mode == _RangeMode.match)
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _startMatch,
+                        keyboardType: TextInputType.number,
+                        onChanged: (_) => setState(() {}),
+                        decoration: const InputDecoration(
+                          labelText: 'First match',
+                          hintText: '18',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: _endMatch,
+                        keyboardType: TextInputType.number,
+                        onChanged: (_) => setState(() {}),
+                        decoration: const InputDecoration(
+                          labelText: 'Last match',
+                          hintText: '34',
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              else
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () => _pickBound(start: true),
+                      icon: const Icon(Icons.play_arrow_outlined),
+                      label: Text(
+                        _startsAt == null
+                            ? 'Set start'
+                            : 'Starts ${_shortDateTime(_startsAt!.toLocal())}',
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: () => _pickBound(start: false),
+                      icon: const Icon(Icons.stop_outlined),
+                      label: Text(
+                        _endsAt == null
+                            ? 'Set end'
+                            : 'Ends ${_shortDateTime(_endsAt!.toLocal())}',
+                      ),
+                    ),
+                  ],
+                ),
+              if (!_selfOnly) ...[
+                const SizedBox(height: 16),
+                Text(
+                  'Assigned to',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.labelLarge?.copyWith(color: muted),
+                ),
+                const SizedBox(height: 8),
+                _AssigneePicker(
+                  known: widget.knownAssignees,
+                  rosterStream: widget.rosterStream,
+                  selected: _selected,
+                  onChanged: (next) => setState(() => _selected = next),
+                ),
+              ],
+              const SizedBox(height: 12),
+              TextField(
+                controller: _notes,
+                textCapitalization: TextCapitalization.sentences,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Notes (optional)',
+                  hintText: 'Bring the spare battery cart',
+                ),
+              ),
+              const SizedBox(height: 20),
+              FilledButton(
+                onPressed: _canSave ? _save : null,
+                child: Text(
+                  _selfOnly
+                      ? (editing ? 'Save' : 'Mark unavailable')
+                      : (editing ? 'Save' : 'Add shift'),
+                ),
               ),
             ],
-            const SizedBox(height: 12),
-            TextField(
-              controller: _notes,
-              textCapitalization: TextCapitalization.sentences,
-              maxLines: 2,
-              decoration: const InputDecoration(
-                labelText: 'Notes (optional)',
-                hintText: 'Bring the spare battery cart',
-              ),
-            ),
-            const SizedBox(height: 20),
-            FilledButton(
-              onPressed: _canSave ? _save : null,
-              child: Text(
-                _selfOnly
-                    ? (editing ? 'Save' : 'Mark unavailable')
-                    : (editing ? 'Save' : 'Add shift'),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

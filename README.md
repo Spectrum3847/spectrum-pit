@@ -8,6 +8,33 @@ FRC pit logistics for Spectrum 3847. One app that keeps the team running at an e
 
 Built with Flutter for iOS, Android, and desktop (Windows, macOS, Linux).
 
+## Install
+
+Builds are attached to [this repo's releases](https://github.com/Spectrum3847/spectrum-pit/releases). They are unsigned, so each platform needs a step or two.
+
+### iOS (AltStore, SideStore, LiveContainer)
+
+Open Sources, add a source, and paste one of these URLs:
+
+- Stable: `https://spectrumpit-stable.web.app/stable.json`
+- Nightly: `https://spectrumpit-nightly.web.app/nightly.json`
+
+Spectrum Pit then shows up as an app you can install, and later builds arrive as updates. The installer re-signs the IPA on device with a free Apple ID, so no paid developer account is needed. Free signing expires after 7 days, so let AltStore or SideStore refresh weekly. SideStore can refresh on device, without a computer.
+
+The stable source tracks releases; the nightly source rebuilds every night from the latest source.
+
+### Android
+
+Download the APK from a release and install it. Android will ask you to allow installs from this source the first time.
+
+### Desktop
+
+Each release carries a Linux AppImage, a Windows ZIP, and a zipped macOS `.app`. None are code-signed:
+
+- Linux: `chmod +x` the AppImage and run it.
+- Windows: unzip, then choose "More info" then "Run anyway" at the SmartScreen prompt.
+- macOS: unzip, then right-click the app and choose Open, since Gatekeeper blocks a double-click on an unsigned app.
+
 ## About this repository
 
 This is the public mirror of Spectrum Pit. The team develops in a private repository; each published release is synced here as a single squashed commit, so this repo always holds the source of the latest release without internal history.

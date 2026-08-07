@@ -17,6 +17,9 @@ import 'src/services/desktop_map_diagram_sync_service.dart';
 import 'src/services/desktop_map_location_sync_service.dart';
 import 'src/services/desktop_packing_sync_service.dart';
 import 'src/services/desktop_pit_shift_sync_service.dart';
+import 'src/services/desktop_firestore_cache_stub.dart'
+    if (dart.library.io) 'src/services/desktop_firestore_cache_io.dart'
+    as firestore_cache_factory;
 import 'src/services/desktop_user_role_service.dart';
 import 'src/services/inventory_sync_service.dart';
 import 'src/services/local_only_services.dart';
@@ -95,12 +98,19 @@ Future<void> main() async {
       firebaseApiKey: DefaultFirebaseOptions.web.apiKey,
       launch: (url) => launchUrl(url, mode: LaunchMode.externalApplication),
     );
+
     final restFirestore = fc.Firestore(
       projectId: DefaultFirebaseOptions.web.projectId,
       idTokenProvider: desktopAuth.idToken,
 
       httpClient: TimeoutHttpClient(),
+      cache: await firestore_cache_factory.createDesktopFirestoreCache(
+        () => desktopAuth.currentUser?.uid,
+      ),
     );
+
+    desktopAuth.onSessionEnded =
+        firestore_cache_factory.clearDesktopFirestoreCacheFor;
     authService = desktopAuth;
     roleService = DesktopUserRoleService(firestore: restFirestore);
     inventorySyncService = DesktopInventorySyncService(

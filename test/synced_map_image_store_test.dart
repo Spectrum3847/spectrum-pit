@@ -188,11 +188,16 @@ void main() {
       expect(await store.diagramFor(MapType.lab), isNull);
     });
 
-    test('remote clear failure still cleans up the local cache', () async {
+    test('remote clear failure cleans up locally, then reports', () async {
       // Each remote step is best-effort on its own (#161): a failed remote
       // pointer clear must not prevent the local cache and preferences from
-      // being removed. The remote pointer survives (the team still sees the
-      // diagram), but this device no longer claims it.
+      // being removed. The remote pointer survives, so the team still sees the
+      // diagram.
+      //
+      // It does throw at the end, though (#184). Completing quietly dropped the
+      // caller to the empty state while the diagram was still shared, so it
+      // reappeared on the next load. The maps tab already renders a throw as a
+      // "could not remove" notice.
       final sync = FakeMapDiagramSyncService(
         readKeyValue: 'key-0.jpg',
         clearFailure: Exception('remote clear failed'),
@@ -203,10 +208,12 @@ void main() {
       );
       await store.pickDiagram(MapType.lab);
 
-      // Completes instead of throwing: the failure is contained to the remote
-      // pointer step.
-      await store.clearDiagram(MapType.lab);
+      await expectLater(
+        store.clearDiagram(MapType.lab),
+        throwsA(isA<Exception>()),
+      );
 
+      // The local cleanup still ran, in full, before the failure surfaced.
       expect(await sync.readKey(MapType.lab), 'key-0.jpg');
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getString('$_r2KeyPref${MapType.lab.name}'), isNull);

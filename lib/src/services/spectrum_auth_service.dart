@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
@@ -68,13 +69,28 @@ class FirebaseSpectrumAuthService implements SpectrumAuthService {
   SpectrumUser? get currentUser => _snapshot.user;
 
   @override
-  Future<String?> idToken() async => _appAuth.currentUser?.getIdToken();
+  Future<String?> idToken() async {
+    final user = _appAuth.currentUser;
+    if (user == null) return null;
+    try {
+      return await user.getIdToken();
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'network-request-failed') return null;
+      rethrow;
+    } on SocketException {
+      return null;
+    } on TimeoutException {
+      return null;
+    }
+  }
 
   @override
   Future<void> initialize() async {
     if (!kIsWeb) {
       await _googleSignIn.initialize();
     }
+
+    await _authStateSubscription?.cancel();
     _authStateSubscription = _appAuth.authStateChanges().listen((user) {
       if (user == null) {
         if (_snapshot.state != SpectrumAuthState.signingIn) {

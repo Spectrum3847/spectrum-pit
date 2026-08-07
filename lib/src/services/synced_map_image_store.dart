@@ -87,10 +87,15 @@ class SyncedMapImageStore implements MapImageStore {
     );
 
     var pointerCleared = false;
+    Object? pointerFailure;
+    StackTrace? pointerStackTrace;
     try {
       await diagramSync.clearKey(mapType);
       pointerCleared = true;
-    } catch (_) {}
+    } catch (error, stackTrace) {
+      pointerFailure = error;
+      pointerStackTrace = stackTrace;
+    }
     if (pointerCleared && key != null && key.isNotEmpty) {
       try {
         await photoService.delete(key);
@@ -105,6 +110,9 @@ class SyncedMapImageStore implements MapImageStore {
     }
     await prefs.remove(_prefsKey(mapType, _prefsR2Key));
     await prefs.remove(_prefsKey(mapType, _prefsFile));
+    if (pointerFailure != null) {
+      Error.throwWithStackTrace(pointerFailure, pointerStackTrace!);
+    }
   }
 
   Future<File?> _cachedFile(MapType mapType) async {

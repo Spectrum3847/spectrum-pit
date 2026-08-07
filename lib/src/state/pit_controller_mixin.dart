@@ -32,6 +32,14 @@ mixin PitControllerMixin<T extends PitModel> on ChangeNotifier {
 
   List<T> _pitItems = <T>[];
 
+  final Map<String, int> _pitMutations = <String, int>{};
+
+  int _pitBeginMutation(String id) =>
+      _pitMutations[id] = (_pitMutations[id] ?? 0) + 1;
+
+  bool _pitIsNewestMutation(String id, int mutation) =>
+      _pitMutations[id] == mutation;
+
   List<T> get items => List.unmodifiable(_pitItems);
 
   Future<void> bootstrap() {
@@ -45,6 +53,7 @@ mixin PitControllerMixin<T extends PitModel> on ChangeNotifier {
   }
 
   Future<void> upsert(T item) async {
+    final mutation = _pitBeginMutation(item.id);
     final previousIndex = _pitItems.indexWhere((e) => e.id == item.id);
     final previousItem = previousIndex < 0 ? null : _pitItems[previousIndex];
     _pitItems = [
@@ -56,6 +65,10 @@ mixin PitControllerMixin<T extends PitModel> on ChangeNotifier {
     try {
       await pitUpsertRemote(item);
     } catch (_) {
+      if (!_pitIsNewestMutation(item.id, mutation)) {
+        await _pitSaveCache().catchError((_) {});
+        rethrow;
+      }
       final restored = [
         for (final existing in _pitItems)
           if (existing.id != item.id) existing,
@@ -74,6 +87,7 @@ mixin PitControllerMixin<T extends PitModel> on ChangeNotifier {
   }
 
   Future<void> delete(String id) async {
+    final mutation = _pitBeginMutation(id);
     final previousIndex = _pitItems.indexWhere((e) => e.id == id);
     final previousItem = previousIndex < 0 ? null : _pitItems[previousIndex];
     _pitItems = [
@@ -84,6 +98,10 @@ mixin PitControllerMixin<T extends PitModel> on ChangeNotifier {
     try {
       await pitDeleteRemote(id);
     } catch (_) {
+      if (!_pitIsNewestMutation(id, mutation)) {
+        await _pitSaveCache().catchError((_) {});
+        rethrow;
+      }
       if (previousItem != null) {
         final restored = [
           for (final existing in _pitItems)

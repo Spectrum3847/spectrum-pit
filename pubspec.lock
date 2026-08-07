@@ -309,11 +309,11 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: e70bf7e60dc27b352b1c89e0abb3a6892c3cbc2b
-      resolved-ref: e70bf7e60dc27b352b1c89e0abb3a6892c3cbc2b
+      ref: "v0.2.0"
+      resolved-ref: "0fb59bd8c569b102a341478c2a1c25565cdd4308"
       url: "https://github.com/Project516/firestore_client.git"
     source: git
-    version: "0.1.0"
+    version: "0.2.0"
   fixnum:
     dependency: transitive
     description:

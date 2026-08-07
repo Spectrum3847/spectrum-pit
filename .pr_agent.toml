@@ -1,0 +1,72 @@
+[config]
+# https://openrouter.ai/openrouter/free, reached through LiteLLM's openrouter/
+# prefix, so the id doubles up: openrouter/ + openrouter/free.
+#
+# This is a router over whatever is free right now, not a fixed model, which is
+# the point. Pinned free ids rotate out: the two this file was first written
+# against (qwen-2.5-coder-32b, deepseek-chat-v3) were already gone by the time
+# it landed. The router keeps resolving without anyone editing this line.
+model = "openrouter/openrouter/free"
+# The router alias isn't in PR-Agent's built-in MAX_TOKENS table, so without
+# this it refuses to call the model at all ("not defined in MAX_TOKENS and no
+# custom_model_max_tokens is set"). 32000 matches this repo's PR sizes with
+# room to spare; found by actually running a review and reading the failure,
+# not from the docs.
+custom_model_max_tokens = 32000
+# PR-Agent's own default fallback is gpt-5.6-terra over a direct OpenAI call,
+# which always fails here (no OPENAI_KEY secret, so it authenticates with a
+# literal "dummy_key"). Fall back to the same OpenRouter router instead, since
+# a second call may land on a different backing model than the first.
+fallback_models = ["openrouter/openrouter/free"]
+
+enable_auto_review = true
+enable_auto_describe = false
+# Off deliberately: free models are rate limited to roughly 20 requests a minute,
+# and code suggestions are the request-hungry tool. Ask for them per PR with
+# /improve when a change actually wants them.
+enable_auto_improve = false
+
+ignore_bot_prs = true
+require_ready_for_review = true
+
+[pr_reviewer]
+# The repo's own rules, so the review flags what a human reviewer here would.
+extra_instructions = """
+This is a Flutter app (Dart) for an FRC team's pit inventory and scouting.
+When reviewing:
+- No emojis anywhere: code, comments, docs, commit messages, UI strings.
+  Material Icons glyphs are the way to draw an affordance.
+- No AI co-author trailers in commits.
+- A top-level dart:ffi import reachable from main.dart breaks the wasm build,
+  which CI gates. Platform-specific code belongs behind a conditional import,
+  and the right condition for FFI is dart.library.ffi, not dart.library.io.
+- Colors, radii and fonts come from PitPalette and app_theme.dart per
+  DESIGN.md: 8px corners, 12px for sheets and dialogs, depth as one tonal step
+  plus a 1px Outline border rather than a shadow, violet accent for action and
+  selection only, a status hue always paired with a label. Flag hardcoded hex
+  colors, radii and font families.
+- A paragraph-long comment justifying a workaround means the code is wrong.
+"""
+
+[github_action_config]
+auto_review = true
+auto_describe = false
+auto_improve = false
+
+[ignore]
+glob = [
+  'pubspec.lock',
+  'package-lock.json',
+  'pnpm-lock.yaml',
+  'yarn.lock',
+  '**/*.g.dart',
+  '**/*.freezed.dart',
+  '**/generated_plugin_registrant.*',
+  '**/GeneratedPluginRegistrant.*',
+  'build/**',
+  'ios/Pods/**',
+  'macos/Pods/**',
+  '**/*.min.js',
+  '**/*.svg',
+  '**/*.lock',
+]

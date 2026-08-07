@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -122,4 +123,46 @@ void main() {
       expect(info.repository, 'owner/fallback');
     },
   );
+
+  test('a network failure is not silently reported as up to date', () async {
+    // The settings screen renders a null result as "you are on the latest
+    // version", so swallowing the transport error told a user on a dropped
+    // network that they were current (#184).
+    final service = DesktopUpdateService(
+      client: MockClient((request) async {
+        throw const SocketException('no route to host');
+      }),
+      currentVersionLoader: () async => '1.1.0',
+    );
+
+    await expectLater(
+      service.checkForUpdate(),
+      throwsA(isA<SocketException>()),
+    );
+  });
+
+  test('one unreachable repository does not hide a newer one', () async {
+    final client = MockClient((request) async {
+      if (request.url.path.contains('owner/primary')) {
+        throw const SocketException('no route to host');
+      }
+      return http.Response(
+        jsonEncode({
+          'tag_name': 'v2.0.0',
+          'html_url': 'https://example.com/releases/v2.0.0',
+        }),
+        200,
+      );
+    });
+    final service = DesktopUpdateService(
+      client: client,
+      currentVersionLoader: () async => '1.5.0',
+      repositories: const ['owner/primary', 'owner/fallback'],
+    );
+
+    final info = await service.checkForUpdate();
+
+    expect(info, isNotNull);
+    expect(info!.repository, 'owner/fallback');
+  });
 }

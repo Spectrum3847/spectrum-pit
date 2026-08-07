@@ -167,6 +167,50 @@ void main() {
     expect(find.byIcon(Icons.location_on_outlined), findsNWidgets(2));
   });
 
+  // A pin is a painted glyph in a bare gesture area, so assistive tech saw a
+  // 48px box with no name, and the diagram itself read as nothing at all (#191).
+  testWidgets('the diagram and its pins announce themselves', (tester) async {
+    final handle = tester.ensureSemantics();
+    imageStore.images[MapType.lab] = _fakeDiagram();
+
+    await pumpTab(
+      tester,
+      pins: [
+        _pin('a', name: 'Battery cart', x: 0.2, y: 0.3, inventoryItemId: 'i1'),
+        _pin('b', name: 'Charging station', x: 0.7, y: 0.6),
+      ],
+    );
+
+    expect(
+      find.bySemanticsLabel('Lab diagram, 2 locations marked'),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsLabel('Battery cart, linked to a tool'),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsLabel('Charging station, not linked to a tool'),
+      findsOneWidget,
+    );
+
+    handle.dispose();
+  });
+
+  testWidgets('an empty diagram says nothing is marked', (tester) async {
+    final handle = tester.ensureSemantics();
+    imageStore.images[MapType.lab] = _fakeDiagram();
+
+    await pumpTab(tester, pins: const []);
+
+    expect(
+      find.bySemanticsLabel('Lab diagram, no locations marked'),
+      findsOneWidget,
+    );
+
+    handle.dispose();
+  });
+
   testWidgets('tapping a pin shows its linked tool and locations', (
     tester,
   ) async {

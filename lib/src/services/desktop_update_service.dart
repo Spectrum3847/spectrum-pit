@@ -50,8 +50,17 @@ class DesktopUpdateService {
       return null;
     }
 
+    Object? transportFailure;
+    StackTrace? transportStackTrace;
     for (final repository in _repositories) {
-      final release = await _loadLatestRelease(repository);
+      final _ReleaseSnapshot? release;
+      try {
+        release = await _loadLatestRelease(repository);
+      } catch (error, stackTrace) {
+        transportFailure ??= error;
+        transportStackTrace ??= stackTrace;
+        continue;
+      }
       if (release == null) {
         continue;
       }
@@ -66,43 +75,48 @@ class DesktopUpdateService {
         );
       }
     }
+    if (transportFailure != null) {
+      Error.throwWithStackTrace(transportFailure, transportStackTrace!);
+    }
     return null;
   }
 
   Future<_ReleaseSnapshot?> _loadLatestRelease(String repository) async {
-    try {
-      final response = await _client.get(
-        Uri.parse('https://api.github.com/repos/$repository/releases/latest'),
-        headers: const {'Accept': 'application/vnd.github+json'},
-      );
-      if (response.statusCode != 200) {
-        return null;
-      }
-      final decoded = jsonDecode(response.body);
-      if (decoded is! Map<String, dynamic>) {
-        return null;
-      }
-      final tagName = (decoded['tag_name'] as String? ?? '').trim();
-      final htmlUrlRaw = (decoded['html_url'] as String? ?? '').trim();
-      if (tagName.isEmpty || htmlUrlRaw.isEmpty) {
-        return null;
-      }
-      final version = _parseVersion(tagName);
-      final url = Uri.tryParse(htmlUrlRaw);
-      if (version == null || url == null) {
-        return null;
-      }
-      final asset = _appImageAsset(decoded['assets']);
-      return _ReleaseSnapshot(
-        version: version,
-        rawTag: tagName,
-        url: url,
-        appImageUrl: asset.url,
-        expectedSha256: asset.digest,
-      );
-    } catch (_) {
+    final response = await _client.get(
+      Uri.parse('https://api.github.com/repos/$repository/releases/latest'),
+      headers: const {'Accept': 'application/vnd.github+json'},
+    );
+    if (response.statusCode != 200) {
       return null;
     }
+
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(response.body);
+    } on FormatException {
+      return null;
+    }
+    if (decoded is! Map<String, dynamic>) {
+      return null;
+    }
+    final tagName = (decoded['tag_name'] as String? ?? '').trim();
+    final htmlUrlRaw = (decoded['html_url'] as String? ?? '').trim();
+    if (tagName.isEmpty || htmlUrlRaw.isEmpty) {
+      return null;
+    }
+    final version = _parseVersion(tagName);
+    final url = Uri.tryParse(htmlUrlRaw);
+    if (version == null || url == null) {
+      return null;
+    }
+    final asset = _appImageAsset(decoded['assets']);
+    return _ReleaseSnapshot(
+      version: version,
+      rawTag: tagName,
+      url: url,
+      appImageUrl: asset.url,
+      expectedSha256: asset.digest,
+    );
   }
 
   static ({String? url, String? digest}) _appImageAsset(dynamic assets) {

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:firestore_client/firestore_client.dart' as fc;
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'spectrum_auth_service.dart';
@@ -29,6 +30,8 @@ class DesktopAuthService implements SpectrumAuthService {
 
   static const String _prefsKey = 'desktop_auth_session_v1';
 
+  Future<void> Function(String uid)? onSessionEnded;
+
   final String clientId;
   final String firebaseApiKey;
 
@@ -37,6 +40,14 @@ class DesktopAuthService implements SpectrumAuthService {
   final fc.FirebaseAuthSession _session;
   final Future<SharedPreferences> Function() _prefsLoader;
   late final Future<fc.GoogleTokens> Function() _signInFlow;
+
+  StreamSubscription<fc.FirebaseUser?>? _authStateSub;
+
+  Future<void>? _listenerSetup;
+
+  bool _endingSession = false;
+
+  Future<void>? _teardown;
 
   final StreamController<SpectrumAuthSnapshot> _controller =
       StreamController<SpectrumAuthSnapshot>.broadcast();
@@ -54,18 +65,59 @@ class DesktopAuthService implements SpectrumAuthService {
   SpectrumUser? get currentUser => _snapshot.user;
 
   @override
-  Future<String?> idToken() => _session.getIdToken();
+  Future<String?> idToken() async {
+    try {
+      return await _session.getIdToken();
+    } on SocketException {
+      return null;
+    } on TimeoutException {
+      return null;
+    } on http.ClientException {
+      return null;
+    } on HttpException {
+      return null;
+    }
+  }
+
+  Future<void> _ensureAuthStateListener() {
+    final previous = _listenerSetup;
+    final next = () async {
+      await previous;
+      await _authStateSub?.cancel();
+      _authStateSub = _session.authStateChanges.listen((user) {
+        if (user == null) unawaited(_handleSessionRevoked());
+      });
+    }();
+    _listenerSetup = next;
+    return next;
+  }
 
   @override
   Future<void> initialize() async {
-    SharedPreferences? prefs;
+    await _ensureAuthStateListener();
     try {
-      prefs = await _prefsLoader();
+      final prefs = await _prefsLoader();
       final stored = prefs.getString(_prefsKey);
       if (stored == null) return;
-      final user = await _session.restore(
-        (jsonDecode(stored) as Map).cast<String, dynamic>(),
-      );
+      final Map<String, dynamic> payload;
+      try {
+        payload = (jsonDecode(stored) as Map).cast<String, dynamic>();
+      } catch (_) {
+        await prefs.remove(_prefsKey);
+        return;
+      }
+
+      final uid = payload['uid'];
+      final refreshToken = payload['refreshToken'];
+      if (uid is! String ||
+          uid.isEmpty ||
+          refreshToken is! String ||
+          refreshToken.isEmpty) {
+        await prefs.remove(_prefsKey);
+        if (uid is String && uid.isNotEmpty) await _endSession(uid);
+        return;
+      }
+      final user = await _session.restore(payload);
       if (user != null) {
         _emit(
           SpectrumAuthSnapshot(
@@ -75,16 +127,17 @@ class DesktopAuthService implements SpectrumAuthService {
         );
       } else {
         await prefs.remove(_prefsKey);
+        final revokedUid = payload['uid'];
+        if (revokedUid is String && revokedUid.isNotEmpty) {
+          await _endSession(revokedUid);
+        }
       }
-    } catch (_) {
-      try {
-        await prefs?.remove(_prefsKey);
-      } catch (_) {}
-    }
+    } catch (_) {}
   }
 
   @override
   Future<void> signIn() async {
+    await _teardown;
     _emit(const SpectrumAuthSnapshot(state: SpectrumAuthState.signingIn));
     try {
       final tokens = await _signInFlow();
@@ -110,16 +163,53 @@ class DesktopAuthService implements SpectrumAuthService {
 
   @override
   Future<void> signOut() async {
+    _endingSession = true;
+    final departingUid = currentUser?.uid;
     await _session.signOut();
+    await _runTeardown(departingUid);
+    _emit(const SpectrumAuthSnapshot(state: SpectrumAuthState.signedOut));
+  }
+
+  Future<void> _handleSessionRevoked() async {
+    if (_endingSession) return;
+    if (_snapshot.state != SpectrumAuthState.signedIn) return;
+    final departingUid = currentUser?.uid;
+    _emit(const SpectrumAuthSnapshot(state: SpectrumAuthState.signedOut));
+    await _runTeardown(departingUid);
+  }
+
+  Future<void> _runTeardown(String? uid) {
+    _endingSession = true;
+    final done = () async {
+      try {
+        await _forgetStoredSession();
+        if (uid != null) await _endSession(uid);
+      } finally {
+        _endingSession = false;
+      }
+    }();
+    _teardown = done;
+    return done;
+  }
+
+  Future<void> _forgetStoredSession() async {
     try {
       final prefs = await _prefsLoader();
       await prefs.remove(_prefsKey);
     } catch (_) {}
-    _emit(const SpectrumAuthSnapshot(state: SpectrumAuthState.signedOut));
+  }
+
+  Future<void> _endSession(String uid) async {
+    try {
+      await onSessionEnded?.call(uid);
+    } catch (_) {}
   }
 
   @override
   Future<void> dispose() async {
+    await _listenerSetup;
+    await _authStateSub?.cancel();
+    _authStateSub = null;
     await _controller.close();
     _session.close();
   }
