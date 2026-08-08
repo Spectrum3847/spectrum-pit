@@ -1,6 +1,7 @@
 import 'pit_model.dart';
 
 enum PackingStatus {
+  notStarted,
   packing,
   staging,
   loading,

@@ -37,6 +37,9 @@ class BorrowController extends ChangeNotifier
   @override
   Future<void> pitDeleteRemote(String id) => _syncService.delete(id);
 
+  int get overdueCount =>
+      items.where((record) => record.isOverdueAt(DateTime.now())).length;
+
   @override
   void dispose() {
     pitDispose();

@@ -40,6 +40,25 @@ mixin PitControllerMixin<T extends PitModel> on ChangeNotifier {
   bool _pitIsNewestMutation(String id, int mutation) =>
       _pitMutations[id] == mutation;
 
+  final Map<String, Future<void>> _pitRemoteOps = <String, Future<void>>{};
+
+  Future<void> _pitQueueRemote(String id, Future<void> Function() action) {
+    final previous = _pitRemoteOps[id];
+    late final Future<void> next;
+    next = () async {
+      try {
+        await previous;
+      } catch (_) {}
+      try {
+        await action();
+      } finally {
+        if (identical(_pitRemoteOps[id], next)) _pitRemoteOps.remove(id);
+      }
+    }();
+    _pitRemoteOps[id] = next;
+    return next;
+  }
+
   List<T> get items => List.unmodifiable(_pitItems);
 
   Future<void> bootstrap() {
@@ -63,7 +82,7 @@ mixin PitControllerMixin<T extends PitModel> on ChangeNotifier {
     ];
     notifyListeners();
     try {
-      await pitUpsertRemote(item);
+      await _pitQueueRemote(item.id, () => pitUpsertRemote(item));
     } catch (_) {
       if (!_pitIsNewestMutation(item.id, mutation)) {
         await _pitSaveCache().catchError((_) {});
@@ -96,7 +115,7 @@ mixin PitControllerMixin<T extends PitModel> on ChangeNotifier {
     ];
     notifyListeners();
     try {
-      await pitDeleteRemote(id);
+      await _pitQueueRemote(id, () => pitDeleteRemote(id));
     } catch (_) {
       if (!_pitIsNewestMutation(id, mutation)) {
         await _pitSaveCache().catchError((_) {});

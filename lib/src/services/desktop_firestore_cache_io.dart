@@ -16,10 +16,7 @@ Future<fc.FirestoreCache?> createDesktopFirestoreCache(
 Future<void> clearDesktopFirestoreCacheFor(String uid) async {
   final root = await _cacheRoot();
   if (root == null) return;
-  await UserScopedFirestoreCache(
-    root: root,
-    currentUid: () => uid,
-  ).clearForUid(uid);
+  await UserScopedFirestoreCache.clearRootForUid(root, uid);
 }
 
 Future<Directory?> _cacheRoot() async {

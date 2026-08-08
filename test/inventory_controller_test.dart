@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -84,7 +85,6 @@ void main() {
     expect(controller.items.single.id, 'a');
     expect(sync.upserts.single.id, 'a');
 
-    // A fresh controller reads the same mock store, proving it persisted.
     final reopened = InventoryController(
       authService: FakeSpectrumAuthService(),
       syncService: FakeInventorySyncService(),
@@ -131,7 +131,6 @@ void main() {
       sync.emit([_item('y'), _item('z')]);
       await Future<void>.delayed(Duration.zero);
 
-      // Still the pre-sign-out list; the superseded stream cannot clobber it.
       expect(controller.items.map((i) => i.id), ['x']);
       controller.dispose();
     },
@@ -147,7 +146,6 @@ void main() {
     sync.emit([_item('x')]);
     await Future<void>.delayed(Duration.zero);
 
-    // A double subscription would still land a consistent single list.
     expect(controller.items.map((i) => i.id), ['x']);
     controller.dispose();
   });
@@ -161,8 +159,6 @@ void main() {
 
     controller.dispose();
 
-    // Emitting after dispose must not reach the (cancelled) listener, which
-    // would otherwise notifyListeners on a disposed ChangeNotifier and throw.
     sync.emit([_item('x')]);
     await Future<void>.delayed(Duration.zero);
   });
@@ -178,8 +174,6 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect(controller.items.map((i) => i.id), ['x']);
 
-    // Capture debugPrint so the test proves onError actually ran, rather than
-    // passing just because an unhandled stream error goes unnoticed here.
     final logged = <String>[];
     final original = debugPrint;
     debugPrint = (String? message, {int? wrapWidth}) =>
@@ -189,7 +183,6 @@ void main() {
     sync.emitError(Exception('permission-denied'));
     await Future<void>.delayed(Duration.zero);
 
-    // The error must not tear the controller down or discard what it had.
     expect(controller.items.map((i) => i.id), ['x']);
     expect(
       logged.where((m) => m.contains('InventoryController sync stream error')),
@@ -204,10 +197,51 @@ void main() {
       syncService: sync,
     );
 
-    // Do not await: dispose lands while bootstrap is still reading the cache.
     final booting = controller.bootstrap();
     controller.dispose();
 
     await expectLater(booting, completes);
+  });
+
+  test(
+    'a delete reaches the server after an upsert already in flight',
+    () async {
+      final controller = InventoryController(
+        authService: FakeSpectrumAuthService(initialUser: _signedInUser),
+        syncService: sync,
+      );
+      addTearDown(controller.dispose);
+      await controller.bootstrap();
+
+      sync.holdUpsert = Completer<void>();
+      final writing = controller.upsert(_item('a', name: 'Drill'));
+
+      final deleting = controller.delete('a');
+      sync.holdUpsert!.complete();
+      await writing;
+      await deleting;
+
+      expect(sync.serverOps, <String>['upsert:a', 'delete:a']);
+      expect(sync.storedIds, isEmpty, reason: 'the deleted item came back');
+    },
+  );
+
+  test('writes to different ids do not wait on each other', () async {
+    final controller = InventoryController(
+      authService: FakeSpectrumAuthService(initialUser: _signedInUser),
+      syncService: sync,
+    );
+    addTearDown(controller.dispose);
+    await controller.bootstrap();
+
+    sync.holdUpsert = Completer<void>();
+    final blocked = controller.upsert(_item('a'));
+
+    await controller.delete('b');
+    expect(sync.serverOps, <String>['delete:b']);
+
+    sync.holdUpsert!.complete();
+    await blocked;
+    expect(sync.serverOps, <String>['delete:b', 'upsert:a']);
   });
 }

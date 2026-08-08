@@ -50,9 +50,7 @@ void main() {
 
   setUp(() {
     sync = FakePitShiftSyncService();
-    // Cleared here, not only in tearDown: pumpTab assigns it, so a failure
-    // before that line would leave teardown disposing the previous test's
-    // controller (#169).
+
     controller = null;
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
@@ -69,8 +67,6 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    // Signed out there is no sync stream, so the offline cache is the only way
-    // shifts reach the tab.
     if (user == null && shifts.isNotEmpty) {
       SharedPreferences.setMockInitialValues(<String, Object>{
         'pit_shifts_cache': jsonEncode([
@@ -112,7 +108,7 @@ void main() {
     await pumpTab(tester);
 
     expect(find.text('No shifts scheduled'), findsOneWidget);
-    // The FAB and the slot both offer the verb.
+
     expect(find.text('Add shift'), findsNWidgets(2));
   });
 
@@ -145,7 +141,7 @@ void main() {
     expect(find.text('Trailer unload'), findsOneWidget);
     expect(find.text('M18-M34'), findsOneWidget);
     expect(find.text('M1-M4'), findsOneWidget);
-    // Kinds render as a label, never colour alone.
+
     expect(find.text('Match block'), findsOneWidget);
     expect(find.text('Load in'), findsOneWidget);
   });
@@ -174,7 +170,7 @@ void main() {
       ),
       findsOneWidget,
     );
-    // Both rows carry the word, not just the alert hue.
+
     expect(find.text('Conflict'), findsNWidgets(2));
   });
 
@@ -246,7 +242,6 @@ void main() {
     await tester.tap(find.text('Mark unavailable'));
     await tester.pumpAndSettle();
 
-    // The form talks about the person, not about a kind of shift.
     expect(find.text('Mark yourself unavailable'), findsOneWidget);
     expect(find.widgetWithText(TextField, 'Reason'), findsOneWidget);
     expect(find.text('Type'), findsNothing);
@@ -293,7 +288,6 @@ void main() {
     await tester.tap(find.byType(FloatingActionButton));
     await tester.pumpAndSettle();
 
-    // Self plus everyone already on the schedule, no roster read required.
     expect(find.widgetWithText(FilterChip, 'Alex Reyes'), findsOneWidget);
     expect(find.widgetWithText(FilterChip, 'Sam Ito'), findsOneWidget);
 
@@ -321,7 +315,6 @@ void main() {
       shifts: [_shift('a', label: 'Qual block', startMatch: 18, endMatch: 34)],
     );
 
-    // No account, so no self-service availability action.
     expect(find.text('Mark unavailable'), findsNothing);
 
     await tester.tap(find.text('Mine'));
@@ -384,7 +377,6 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
     await tester.pumpAndSettle();
 
-    // The write failed, so the sheet stays open and the shift is untouched.
     expect(find.text('Edit shift'), findsOneWidget);
     expect(controller!.items.single.id, 'a');
   });

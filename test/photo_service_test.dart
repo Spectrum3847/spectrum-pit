@@ -1,7 +1,11 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
+import 'package:spectrumpit/src/services/photo_disk_cache.dart';
 import 'package:spectrumpit/src/services/photo_service.dart';
 
 import 'support/photo_test_support.dart';
@@ -12,7 +16,89 @@ Uint8List _bytes(int length, [int fill = 7]) =>
 PickedPhoto _photo({int length = 32, String type = 'image/jpeg'}) =>
     PickedPhoto(bytes: _bytes(length), contentType: type);
 
+class _SlowWriteDiskCache extends PhotoDiskCache {
+  _SlowWriteDiskCache() : super(directoryLoader: _unused);
+
+  static Future<Directory> _unused() =>
+      throw StateError('this fake never touches the filesystem');
+
+  final Map<String, Uint8List> files = <String, Uint8List>{};
+  final List<String> completed = <String>[];
+  Completer<void>? gate;
+
+  @override
+  Future<void> write(String key, Uint8List bytes) async {
+    if (gate != null) await gate!.future;
+    files[key] = bytes;
+    completed.add('write:$key');
+  }
+
+  @override
+  Future<void> remove(String key) async {
+    files.remove(key);
+    completed.add('remove:$key');
+  }
+}
+
+void _diskRaceTests() {
+  test('a delete outlasts a write that was still in flight', () async {
+    final disk = _SlowWriteDiskCache();
+    final service = fakePhotoService(diskCache: disk);
+
+    disk.gate = Completer<void>();
+    final key = await service.upload(_photo());
+
+    expect(disk.files, isEmpty);
+
+    final deletion = service.delete(key);
+
+    disk.gate!.complete();
+    await deletion;
+
+    expect(disk.completed, <String>['write:$key', 'remove:$key']);
+    expect(disk.files, isEmpty, reason: 'the deleted photo came back');
+  });
+
+  test('a delete waits for an in-flight write rather than racing it', () async {
+    final disk = _SlowWriteDiskCache();
+    final service = fakePhotoService(diskCache: disk);
+
+    disk.gate = Completer<void>();
+    final key = await service.upload(_photo());
+    var deleteDone = false;
+    final deletion = service.delete(key).then((_) => deleteDone = true);
+
+    await pumpEventQueue();
+    expect(
+      deleteDone,
+      isFalse,
+      reason: 'delete returned while a write for the same key was pending',
+    );
+
+    disk.gate!.complete();
+    await deletion;
+    expect(deleteDone, isTrue);
+  });
+
+  test('operations on different keys do not block each other', () async {
+    final disk = _SlowWriteDiskCache();
+    final service = fakePhotoService(diskCache: disk);
+
+    disk.gate = Completer<void>();
+    final blocked = await service.upload(_photo());
+
+    await service.delete('other.jpg');
+
+    expect(disk.completed, <String>['remove:other.jpg']);
+    disk.gate!.complete();
+    await pumpEventQueue();
+    expect(disk.files.keys, <String>[blocked]);
+  });
+}
+
 void main() {
+  _diskRaceTests();
+
   test('upload returns the key the Worker minted', () async {
     final requests = <http.BaseRequest>[];
     final service = fakePhotoService(requests: requests);
@@ -105,7 +191,7 @@ void main() {
 
     await service.fetch('a.jpg');
     await service.fetch('b.jpg');
-    // Touching a.jpg makes b.jpg the oldest, so caching c.jpg evicts b.jpg.
+
     await service.fetch('a.jpg');
     await service.fetch('c.jpg');
     expect(requests.length, 3);
@@ -172,7 +258,7 @@ void main() {
 
     expect(stored, isEmpty);
     expect(requests.last.method, 'DELETE');
-    // The cache must not keep serving bytes that no longer exist.
+
     await expectLater(service.fetch('a.jpg'), throwsA(isA<PhotoException>()));
   });
 
@@ -191,7 +277,6 @@ void main() {
 
   test('pickImage hands each platform its own source, returns the bytes, and '
       'never uploads', () async {
-    // Restore the platform override even if an expectation fails below.
     addTearDown(() => debugDefaultTargetPlatformOverride = null);
     for (final (platform, expected) in [
       (TargetPlatform.iOS, PhotoSource.gallery),

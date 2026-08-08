@@ -197,8 +197,7 @@ void main() {
             if (calls == 2) {
               return http.Response('temporarily unavailable', 503);
             }
-            // The poll after the failure returns changed data so the
-            // fingerprint diff produces a second emission.
+
             return http.Response(
               jsonEncode({
                 'documents': [

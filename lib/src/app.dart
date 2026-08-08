@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'services/container_photo_sync_service.dart';
 import 'services/issue_report_service.dart';
 import 'services/map_image_store.dart';
 import 'services/photo_service.dart';
@@ -27,6 +28,7 @@ class StrategyApp extends StatefulWidget {
     required this.borrowController,
     required this.mapLocationController,
     required this.mapImageStore,
+    required this.containerPhotoSyncService,
     required this.photoService,
     required this.pitShiftController,
     this.issueReportService,
@@ -42,6 +44,7 @@ class StrategyApp extends StatefulWidget {
   final BorrowController borrowController;
   final MapLocationController mapLocationController;
   final MapImageStore mapImageStore;
+  final ContainerPhotoSyncService containerPhotoSyncService;
   final PhotoService photoService;
   final PitShiftController pitShiftController;
   final IssueReportService? issueReportService;
@@ -142,6 +145,7 @@ class _StrategyAppState extends State<StrategyApp> {
             borrowController: widget.borrowController,
             mapLocationController: widget.mapLocationController,
             mapImageStore: widget.mapImageStore,
+            containerPhotoSyncService: widget.containerPhotoSyncService,
             photoService: widget.photoService,
             pitShiftController: widget.pitShiftController,
             issueReportService: widget.issueReportService,

@@ -10,14 +10,20 @@ import 'package:spectrumpit/src/state/borrow_controller.dart';
 import 'support/fake_borrow_sync_service.dart';
 import 'support/fake_spectrum_auth_service.dart';
 
-BorrowRecord _item(String id, {String toolName = 'Drill'}) => BorrowRecord(
+BorrowRecord _item(
+  String id, {
+  String toolName = 'Drill',
+  DateTime? estimatedReturn,
+  bool returned = false,
+}) => BorrowRecord(
   id: id,
   toolName: toolName,
   teamName: 'Robowizards',
   teamNumber: 1234,
   competition: 'Regional',
   checkedOutAt: DateTime.utc(2026, 1, 1),
-  returned: false,
+  estimatedReturn: estimatedReturn,
+  returned: returned,
   updatedAt: DateTime.utc(2026, 1, 1),
 );
 
@@ -86,7 +92,6 @@ void main() {
     expect(controller.items.single.id, 'a');
     expect(sync.upserts.single.id, 'a');
 
-    // A fresh controller reads the same mock store, proving it persisted.
     final reopened = BorrowController(
       authService: FakeSpectrumAuthService(),
       syncService: FakeBorrowSyncService(),
@@ -96,6 +101,71 @@ void main() {
     controller.dispose();
     reopened.dispose();
   });
+
+  test('overdueCount is zero with no overdue loans', () async {
+    final controller = BorrowController(
+      authService: FakeSpectrumAuthService(),
+      syncService: sync,
+    );
+    await controller.bootstrap();
+
+    expect(controller.overdueCount, 0);
+
+    final now = DateTime.now();
+    await controller.upsert(
+      _item('a', estimatedReturn: now.add(const Duration(hours: 1))),
+    );
+    await controller.upsert(_item('b'));
+
+    expect(controller.overdueCount, 0);
+    controller.dispose();
+  });
+
+  test(
+    'overdueCount counts active loans past their estimated return',
+    () async {
+      final controller = BorrowController(
+        authService: FakeSpectrumAuthService(),
+        syncService: sync,
+      );
+      await controller.bootstrap();
+      final now = DateTime.now();
+      await controller.upsert(
+        _item('a', estimatedReturn: now.subtract(const Duration(hours: 1))),
+      );
+      await controller.upsert(
+        _item('b', estimatedReturn: now.subtract(const Duration(minutes: 5))),
+      );
+      await controller.upsert(
+        _item('c', estimatedReturn: now.add(const Duration(hours: 1))),
+      );
+
+      expect(controller.overdueCount, 2);
+      controller.dispose();
+    },
+  );
+
+  test(
+    'overdueCount excludes a returned loan past its estimated return',
+    () async {
+      final controller = BorrowController(
+        authService: FakeSpectrumAuthService(),
+        syncService: sync,
+      );
+      await controller.bootstrap();
+      final now = DateTime.now();
+      await controller.upsert(
+        _item(
+          'a',
+          estimatedReturn: now.subtract(const Duration(hours: 1)),
+          returned: true,
+        ),
+      );
+
+      expect(controller.overdueCount, 0);
+      controller.dispose();
+    },
+  );
 
   test('delete removes optimistically and records the call', () async {
     final controller = BorrowController(
@@ -130,7 +200,6 @@ void main() {
       sync.emit([_item('y'), _item('z')]);
       await Future<void>.delayed(Duration.zero);
 
-      // Still the pre-sign-out list; the superseded stream cannot clobber it.
       expect(controller.items.map((i) => i.id), ['x']);
       controller.dispose();
     },
@@ -146,7 +215,6 @@ void main() {
     sync.emit([_item('x')]);
     await Future<void>.delayed(Duration.zero);
 
-    // A double subscription would still land a consistent single list.
     expect(controller.items.map((i) => i.id), ['x']);
     controller.dispose();
   });
@@ -160,8 +228,6 @@ void main() {
 
     controller.dispose();
 
-    // Emitting after dispose must not reach the (cancelled) listener, which
-    // would otherwise notifyListeners on a disposed ChangeNotifier and throw.
     sync.emit([_item('x')]);
     await Future<void>.delayed(Duration.zero);
   });
@@ -177,8 +243,6 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect(controller.items.map((i) => i.id), ['x']);
 
-    // Capture debugPrint so the test proves onError actually ran, rather than
-    // passing just because an unhandled stream error goes unnoticed here.
     final logged = <String>[];
     final original = debugPrint;
     debugPrint = (String? message, {int? wrapWidth}) =>
@@ -188,7 +252,6 @@ void main() {
     sync.emitError(Exception('permission-denied'));
     await Future<void>.delayed(Duration.zero);
 
-    // The error must not tear the controller down or discard what it had.
     expect(controller.items.map((i) => i.id), ['x']);
     expect(
       logged.where((m) => m.contains('BorrowController sync stream error')),
@@ -203,7 +266,6 @@ void main() {
       syncService: sync,
     );
 
-    // Do not await: dispose lands while bootstrap is still reading the cache.
     final booting = controller.bootstrap();
     controller.dispose();
 

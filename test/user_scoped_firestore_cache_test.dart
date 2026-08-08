@@ -35,7 +35,6 @@ void main() {
     uid = 'userB';
     expect(await subject.read('doc/teams/1234'), isNull);
 
-    // And the first account still has its own copy.
     uid = 'userA';
     expect(await subject.read('doc/teams/1234'), '{"a":1}');
   });
@@ -48,14 +47,26 @@ void main() {
     expect(root.listSync(), isEmpty);
   });
 
-  test('a uid that could escape the root gets no cache', () async {
-    final subject = cache();
-    uid = '../elsewhere';
-    await subject.write('doc/teams/1234', '{"a":1}');
+  for (final (String label, String bad) in <(String, String)>[
+    ('POSIX traversal', '../elsewhere'),
+    ('Windows traversal', r'..\elsewhere'),
+    ('absolute path', '/etc/passwd'),
+    ('drive-qualified path', r'C:\temp'),
+    ('empty', ''),
+    (
+      'over 64 characters',
+      'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    ),
+  ]) {
+    test('a uid that could escape the root gets no cache: $label', () async {
+      final subject = cache();
+      uid = bad;
+      await subject.write('doc/teams/1234', '{"a":1}');
 
-    expect(await subject.read('doc/teams/1234'), isNull);
-    expect(root.listSync(), isEmpty);
-  });
+      expect(await subject.read('doc/teams/1234'), isNull);
+      expect(root.listSync(), isEmpty);
+    });
+  }
 
   test('clear drops only the signed-in account', () async {
     final subject = cache();

@@ -10,8 +10,10 @@ import 'package:url_launcher/url_launcher.dart';
 import 'firebase_options.dart';
 import 'src/app.dart';
 import 'src/services/borrow_sync_service.dart';
+import 'src/services/container_photo_sync_service.dart';
 import 'src/services/desktop_auth_service.dart';
 import 'src/services/desktop_borrow_sync_service.dart';
+import 'src/services/desktop_container_photo_sync_service.dart';
 import 'src/services/desktop_inventory_sync_service.dart';
 import 'src/services/desktop_map_diagram_sync_service.dart';
 import 'src/services/desktop_map_location_sync_service.dart';
@@ -77,6 +79,7 @@ Future<void> main() async {
   final BorrowSyncService borrowSyncService;
   final MapLocationSyncService mapLocationSyncService;
   final MapDiagramSyncService mapDiagramSyncService;
+  final ContainerPhotoSyncService containerPhotoSyncService;
   final PitShiftSyncService pitShiftSyncService;
   IssueReportService? issueReportService;
   TelemetryService? telemetryService;
@@ -89,6 +92,7 @@ Future<void> main() async {
     borrowSyncService = FirestoreBorrowSyncService();
     mapLocationSyncService = FirestoreMapLocationSyncService();
     mapDiagramSyncService = FirestoreMapDiagramSyncService();
+    containerPhotoSyncService = FirestoreContainerPhotoSyncService();
     pitShiftSyncService = FirestorePitShiftSyncService();
     telemetryService = TelemetryService();
   } else if (_isDesktop && _oauthClientId.isNotEmpty) {
@@ -124,6 +128,9 @@ Future<void> main() async {
     mapDiagramSyncService = DesktopMapDiagramSyncService(
       firestore: restFirestore,
     );
+    containerPhotoSyncService = DesktopContainerPhotoSyncService(
+      firestore: restFirestore,
+    );
     pitShiftSyncService = DesktopPitShiftSyncService(firestore: restFirestore);
 
     issueReportService = IssueReportService(
@@ -141,6 +148,7 @@ Future<void> main() async {
     borrowSyncService = LocalBorrowSyncService();
     mapLocationSyncService = LocalMapLocationSyncService();
     mapDiagramSyncService = LocalMapDiagramSyncService();
+    containerPhotoSyncService = LocalContainerPhotoSyncService();
     pitShiftSyncService = LocalPitShiftSyncService();
   }
 
@@ -201,6 +209,7 @@ Future<void> main() async {
       borrowController: borrowController,
       mapLocationController: mapLocationController,
       mapImageStore: mapImageStore,
+      containerPhotoSyncService: containerPhotoSyncService,
       photoService: photoService,
       pitShiftController: pitShiftController,
       issueReportService: issueReportService,

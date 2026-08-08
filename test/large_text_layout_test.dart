@@ -15,17 +15,12 @@ import 'package:spectrumpit/src/ui/inventory_tab.dart';
 import 'package:spectrumpit/src/ui/packing_tab.dart';
 
 import 'support/fake_borrow_sync_service.dart';
+import 'support/fake_container_photo_sync_service.dart';
 import 'support/fake_inventory_sync_service.dart';
 import 'support/fake_packing_sync_service.dart';
 import 'support/fake_spectrum_auth_service.dart';
 import 'support/photo_test_support.dart';
 
-/// #193: Windows and Apple both let a user run text at 200%, and this app
-/// honours the setting, so the open question is whether a dense row survives it.
-///
-/// An overflow reports a FlutterError while painting, which fails the test that
-/// pumped it. So each case is "mount this tab at 200% on a narrow phone and let
-/// it paint", and a regression names the widget that broke.
 const SpectrumUser _user = SpectrumUser(uid: 'uid-1', displayName: 'Tester');
 const Size _smallPhone = Size(360, 760);
 const TextScaler _doubled = TextScaler.linear(2.0);
@@ -39,8 +34,7 @@ Future<void> _pumpAtDoubleText(WidgetTester tester, Widget body) async {
   await tester.pumpWidget(
     MaterialApp(
       theme: buildDarkAppTheme(),
-      // The app never sets textScaler itself, so overriding it here is exactly
-      // what a user with 200% text in their OS settings hands the app.
+
       builder: (BuildContext context, Widget? child) => MediaQuery(
         data: MediaQuery.of(context).copyWith(textScaler: _doubled),
         child: child!,
@@ -77,8 +71,6 @@ void main() {
 
     await _pumpAtDoubleText(tester, InventoryTab(controller: controller));
 
-    // The seeded row has to be on screen, or the test would pass without ever
-    // painting the dense content it is meant to check.
     expect(find.text('Cordless drill with the long chuck'), findsOneWidget);
     expect(find.text('RC1-DB'), findsOneWidget);
     expect(find.text('CAB-A2'), findsOneWidget);
@@ -109,7 +101,7 @@ void main() {
     await _pumpAtDoubleText(tester, BorrowTab(controller: controller));
 
     expect(find.text('Rivet gun'), findsOneWidget);
-    // Team and competition are rich paragraphs, so their text lives in spans.
+
     expect(
       find.textContaining('The Cheesy Poofs', findRichText: true),
       findsOneWidget,
@@ -136,12 +128,21 @@ void main() {
         updatedAt: DateTime.utc(2026, 1, 1),
       ),
     ]);
+    final inventorySync = FakeInventorySyncService();
+    final inventoryController = InventoryController(
+      authService: FakeSpectrumAuthService(initialUser: _user),
+      syncService: inventorySync,
+    );
+    addTearDown(inventoryController.dispose);
+    await inventoryController.bootstrap();
 
     await _pumpAtDoubleText(
       tester,
       PackingTab(
         controller: controller,
+        inventoryController: inventoryController,
         photoService: unavailablePhotoService(),
+        containerPhotoSyncService: FakeContainerPhotoSyncService(),
       ),
     );
 

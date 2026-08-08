@@ -27,7 +27,7 @@ void main() {
       expect(loc.x, 0);
       expect(loc.y, 0);
       expect(loc.inventoryItemId, isNull);
-      // Missing updatedAt falls back to the Unix epoch in UTC.
+
       expect(
         loc.updatedAt,
         DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
@@ -61,7 +61,7 @@ void main() {
       expect(restored.x, original.x);
       expect(restored.y, original.y);
       expect(restored.inventoryItemId, original.inventoryItemId);
-      // updatedAt survives the roundtrip unchanged.
+
       expect(restored.updatedAt, original.updatedAt);
     });
 
@@ -82,6 +82,7 @@ void main() {
     test('fromString parses known values', () {
       expect(MapType.fromString('lab'), MapType.lab);
       expect(MapType.fromString('pit'), MapType.pit);
+      expect(MapType.fromString('vehicle'), MapType.vehicle);
     });
 
     test('fromString falls back to lab for unknown', () {

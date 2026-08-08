@@ -20,7 +20,6 @@ void main() {
     expect(snap.docs, hasLength(1));
     final data = snap.docs.single.data();
 
-    // Only the keys the Firestore rules' isValidBugReport allows.
     expect(data.keys.toSet(), {
       'id',
       'title',
@@ -34,14 +33,14 @@ void main() {
       'status',
       'createdAt',
     });
-    // Trimmed text and required invariants.
+
     expect(data['title'], 'Board did not save');
     expect(data['body'], 'Steps to reproduce');
     expect(data['reporterUid'], 'uid-123');
     expect(data['reporterName'], 'Jane Scout');
     expect(data['status'], 'new');
     expect(data['id'], snap.docs.single.id);
-    // createdAt is an ISO-8601 UTC string inside the rules' century bounds.
+
     final createdAt = data['createdAt'] as String;
     expect(createdAt.startsWith('20'), isTrue);
     expect(DateTime.tryParse(createdAt), isNotNull);
@@ -62,9 +61,7 @@ void main() {
     final data = (await firestore.collection('bugReports').get()).docs.single
         .data();
     expect(data['roles'], 'Admin, Pit');
-    // Still exactly the whitelisted keys, now including roles (mirrors the
-    // key-set comparison in the first test; firestore.rules isValidBugReport
-    // is the source of truth for this set).
+
     expect(data.keys.toSet(), {
       'id',
       'title',

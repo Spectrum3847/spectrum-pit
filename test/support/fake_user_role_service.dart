@@ -10,15 +10,11 @@ class FakeUserRoleService implements UserRoleService {
   final StreamController<List<UserProfile>> _profiles =
       StreamController<List<UserProfile>>.broadcast();
 
-  // Pre-set a specific role set for a UID. If not set, fetchOrCreateRoles
-  // will auto-assign viewer (mirroring real first-sign-in behaviour: the
-  // no-access default until an admin promotes the account, #334).
   void setRoles(String uid, Set<UserRole> roles) {
     _roles[uid] = roles;
     _emitProfiles();
   }
 
-  // Convenience wrapper for single-role tests.
   void setRole(String uid, UserRole role) {
     _roles[uid] = {role};
     _emitProfiles();
@@ -46,10 +42,6 @@ class FakeUserRoleService implements UserRoleService {
 
   @override
   Stream<List<UserProfile>> streamAllProfiles() async* {
-    // Emit the current roster first (the real service emits on first read),
-    // then forward every subsequent mutation. A per-listener generator is
-    // used instead of pre-adding to the broadcast controller, because a
-    // broadcast drops events added before the caller subscribes.
     yield _currentProfiles();
     yield* _profiles.stream;
   }
@@ -64,8 +56,7 @@ class FakeUserRoleService implements UserRoleService {
           ),
         )
         .toList();
-    // streamAllProfiles' contract is display-name ordering, matching the real
-    // services' client-side sort.
+
     profiles.sort(
       (a, b) =>
           a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()),

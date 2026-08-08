@@ -11,8 +11,7 @@ void main() {
     addTearDown(auth.dispose);
     expect(auth.snapshot.state, SpectrumAuthState.signedIn);
     expect(auth.currentUser?.uid, 'local');
-    // The local session is synthetic, so anything needing a Firebase token
-    // (the photo Worker) has to see null and degrade.
+
     expect(await auth.idToken(), isNull);
   });
 
@@ -38,13 +37,10 @@ void main() {
 
       await controller.bootstrap();
 
-      // Not the no-access viewer state: the offline user can see the app.
       expect(controller.roles, {UserRole.pit});
       expect(controller.visibleTabIndices, isNotEmpty);
       expect(controller.canManageUsers, isFalse);
 
-      // Local-only grants pit, never admin, so role management is unavailable
-      // (user management needs Firestore, which is absent offline).
       await expectLater(
         controller.updateUserRoles('local', {UserRole.admin}),
         throwsStateError,

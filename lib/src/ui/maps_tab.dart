@@ -284,6 +284,11 @@ class _MapsTabState extends State<MapsTab> {
                               label: Text('Pit'),
                               icon: Icon(Icons.warehouse_outlined),
                             ),
+                            ButtonSegment(
+                              value: MapType.vehicle,
+                              label: Text('Vehicle'),
+                              icon: Icon(Icons.airport_shuttle_outlined),
+                            ),
                           ],
                           selected: {_mapType},
                           onSelectionChanged: (s) => _switchMapType(s.first),
@@ -443,7 +448,11 @@ class _MapsTabState extends State<MapsTab> {
     );
   }
 
-  static String _mapLabel(MapType type) => type == MapType.lab ? 'Lab' : 'Pit';
+  static String _mapLabel(MapType type) => switch (type) {
+    MapType.lab => 'Lab',
+    MapType.pit => 'Pit',
+    MapType.vehicle => 'Vehicle',
+  };
 }
 
 class _PinGlyph extends StatelessWidget {
@@ -481,7 +490,11 @@ class _EmptyMap extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final muted = PitPalette.inkMutedOf(context);
-    final label = mapType == MapType.lab ? 'lab' : 'pit';
+    final label = switch (mapType) {
+      MapType.lab => 'lab',
+      MapType.pit => 'pit',
+      MapType.vehicle => 'vehicle',
+    };
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),

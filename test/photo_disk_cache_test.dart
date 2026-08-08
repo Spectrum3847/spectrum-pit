@@ -5,9 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:spectrumpit/src/services/photo_disk_cache.dart';
 
-// #164: photos were cached in memory only, so scrolling the packing list after a
-// relaunch refetched every image over venue wifi. The disk cache keeps them
-// across launches, bounded by total size and evicted least-recently-read.
 void main() {
   late Directory base;
   late PhotoDiskCache cache;
@@ -34,7 +31,6 @@ void main() {
   });
 
   test('a miss is null, not an error', () async {
-    // The cache must never fail a fetch, only save one.
     expect(await cache.read('never-stored'), isNull);
   });
 
@@ -46,7 +42,6 @@ void main() {
   });
 
   test('removing something absent is not an error', () async {
-    // delete() calls this unconditionally.
     await cache.remove('never-stored');
   });
 
@@ -62,7 +57,6 @@ void main() {
   });
 
   test('the cache is trimmed back under its limit', () async {
-    // Four 300-byte photos against a 1000-byte cap: one has to go.
     await cache.write('a', bytes(300));
     await cache.write('b', bytes(300));
     await cache.write('c', bytes(300));
@@ -77,9 +71,6 @@ void main() {
       await cache.write('old', bytes(400));
       await cache.write('newer', bytes(400));
 
-      // Times set explicitly rather than by sleeping between writes: wall-clock
-      // gaps made this flaky, and the eviction order is the only thing under test.
-      // 'old' is the most recently read, so it must survive.
       final dir = Directory('${base.path}/photos');
       await File('${dir.path}/old').setLastModified(DateTime.now());
       await File(
@@ -98,9 +89,6 @@ void main() {
   );
 
   test('a key that could escape the directory reads as a miss', () async {
-    // Keys come from the Worker and should be safe, but they end up in a path,
-    // so the guard refuses them. read() still returns null rather than throwing:
-    // the cache must never fail a fetch, only save one.
     for (final key in <String>['', '../escape', 'a/b', r'a\b', '..']) {
       expect(await cache.read(key), isNull, reason: 'key: $key');
     }
@@ -109,7 +97,6 @@ void main() {
   test('a key that could escape the directory writes nothing', () async {
     await cache.write('../escape', bytes(10));
 
-    // Nothing landed anywhere, including outside the cache directory.
     expect(await cache.currentBytes(), 0);
     expect(await File('${base.path}/escape').exists(), isFalse);
   });

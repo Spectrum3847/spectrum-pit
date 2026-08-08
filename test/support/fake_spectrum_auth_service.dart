@@ -22,8 +22,6 @@ class FakeSpectrumAuthService implements SpectrumAuthService {
   int signInCalls = 0;
   int signOutCalls = 0;
 
-  /// Set this to the user that signIn() should produce. Defaults to a
-  /// generic test user.
   SpectrumUser nextSignInUser = const SpectrumUser(
     uid: 'test-uid',
     displayName: 'Test User',
@@ -39,7 +37,6 @@ class FakeSpectrumAuthService implements SpectrumAuthService {
   @override
   SpectrumUser? get currentUser => _snapshot.user;
 
-  /// What [idToken] returns. Null models a signed-out or local-only session.
   String? nextIdToken = 'fake-id-token';
 
   @override
@@ -68,7 +65,6 @@ class FakeSpectrumAuthService implements SpectrumAuthService {
     _emit(const SpectrumAuthSnapshot(state: SpectrumAuthState.signedOut));
   }
 
-  /// Push a snapshot to simulate state changes (used in tests).
   void emit(SpectrumAuthSnapshot next) => _emit(next);
 
   void _emit(SpectrumAuthSnapshot next) {

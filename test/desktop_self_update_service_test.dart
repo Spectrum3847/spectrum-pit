@@ -27,15 +27,12 @@ void main() {
     );
 
     expect(target.readAsBytesSync(), payload);
-    // chmod runs on the staged file, before the rename, so a chmod failure
-    // cannot leave the installed AppImage non-executable.
+
     expect(madeExec, '${target.path}.new');
     expect(relaunched, target.path);
   });
 
   test('update accepts an uppercase or padded digest', () async {
-    // A digest read out of release metadata can arrive uppercase or with
-    // surrounding whitespace. Neither is a checksum mismatch.
     final dir = Directory.systemTemp.createTempSync('selfupdate');
     addTearDown(() => dir.deleteSync(recursive: true));
     final target = File('${dir.path}/App.AppImage')..writeAsBytesSync([0]);
@@ -97,7 +94,7 @@ void main() {
         ),
         throwsStateError,
       );
-      // The existing file is untouched; the error body is never swapped in.
+
       expect(target.readAsBytesSync(), [1, 2, 3]);
     },
   );

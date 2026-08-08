@@ -23,8 +23,6 @@ class _FlakyRoleService extends FakeUserRoleService {
   }
 }
 
-// The stream a dead poll loop errored is done for good, so the error state
-// must offer a retry that builds a fresh one (#526).
 void main() {
   testWidgets('users error state offers a retry that resubscribes', (
     tester,
@@ -38,8 +36,6 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        // Disable ink splash to avoid shader-format mismatch in the test
-        // engine (same workaround as widget_test.dart).
         theme: ThemeData(splashFactory: NoSplash.splashFactory),
         home: Scaffold(body: UserManagementBody(roleController: controller)),
       ),
@@ -62,7 +58,7 @@ void main() {
     final roleService = FakeUserRoleService()
       ..setRole('u1', UserRole.pit)
       ..setRole('admin-1', UserRole.admin);
-    // Role changes require a signed-in admin (updateUserRoles guards on it).
+
     final controller = UserRoleController(
       authService: FakeSpectrumAuthService(
         initialUser: const SpectrumUser(uid: 'admin-1', displayName: 'Admin'),

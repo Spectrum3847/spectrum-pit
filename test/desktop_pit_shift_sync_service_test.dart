@@ -206,21 +206,14 @@ void main() {
         ),
       );
 
-      // Registered before the subscription so the loop stops even if an
-      // expectation below throws (#169).
       addTearDown(service.dispose);
       final emissions = <List<PitShift>>[];
       final sub = service.streamAll().listen(emissions.add);
       await Future<void>.delayed(const Duration(milliseconds: 40));
-      // dispose() first: an async* generator only acts on cancellation at a
-      // yield, and this one stops yielding once the fingerprint stabilizes, so
-      // cancel() alone never completes (CI timed out proving it). Stopping the
-      // loop lets it return, and then the await is safe.
+
       service.dispose();
       await sub.cancel();
 
-      // Many polls run in that window, but the fingerprint match suppresses
-      // every repeat: one emission proves the schedule is stable.
       expect(emissions.length, 1);
       expect(emissions.single.single.id, 'a');
     });

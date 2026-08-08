@@ -8,14 +8,11 @@ class FakeBorrowSyncService implements BorrowSyncService {
   final StreamController<List<BorrowRecord>> _controller =
       StreamController<List<BorrowRecord>>.broadcast();
 
-  // Recorded write calls, for assertions.
   final List<BorrowRecord> upserts = [];
   final List<String> deletes = [];
 
-  /// Push a snapshot to simulate a realtime emission (used in tests).
   void emit(List<BorrowRecord> items) => _controller.add(items);
 
-  /// Push a stream error to simulate a failed subscription (used in tests).
   void emitError(Object error) => _controller.addError(error);
 
   @override

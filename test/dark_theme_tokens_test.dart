@@ -5,10 +5,6 @@ import 'package:spectrumpit/src/theme/app_theme.dart';
 import 'package:spectrumpit/src/theme/pit_palette.dart';
 
 void main() {
-  // The Shadow Board theme resolves every dual-theme surface through the
-  // PitPalette `*Of(context)` accessors so no raw light token leaks into the
-  // dark theme (or vice versa). Asserting they resolve the right tokens per
-  // brightness keeps that guarantee.
   group('theme-aware palette tokens', () {
     testWidgets('accessors resolve dark tokens in dark mode', (tester) async {
       late BuildContext context;
@@ -60,14 +56,11 @@ void main() {
       expect(theme.colorScheme.primary, PitPalette.violetCore);
       expect(theme.scaffoldBackgroundColor, PitPalette.caseBlack);
       expect(theme.colorScheme.outline, PitPalette.outline);
-      // No shadows anywhere: depth is drawn, not floated.
+
       expect(theme.cardTheme.elevation, 0);
     });
   });
 
-  // Guards for the drawn-depth and one-violet rules that a token swap could
-  // silently regress (each of these caught a real gap in review). Pure theme
-  // assertions run over both theme builders.
   group('Shadow Board token guards', () {
     test('sheets and dialogs draw Surface Strong plus the outline border', () {
       final dark = buildDarkAppTheme();
@@ -150,9 +143,6 @@ void main() {
     });
   });
 
-  // #169: the status accessors had no coverage in either brightness. They colour
-  // every shift chip and inventory badge, so a raw token leaking across themes
-  // shows up as an unreadable chip rather than as a crash.
   group('status tokens resolve per brightness', () {
     Future<BuildContext> pump(WidgetTester tester, ThemeData theme) async {
       late BuildContext context;
@@ -203,9 +193,6 @@ void main() {
     });
 
     test('no status token is shared across the two themes', () {
-      // Compared as constants rather than through two pumps: reading them from
-      // captured BuildContexts across a theme swap resolved the wrong theme and
-      // made this pass or fail for reasons unrelated to the palette.
       const dark = <Color>[
         PitPalette.statusPacking,
         PitPalette.statusStaging,
@@ -221,8 +208,6 @@ void main() {
         PitPalette.lightStatusOverdue,
       ];
 
-      // A per-theme token that does not differ would make its accessor
-      // pointless.
       for (var i = 0; i < dark.length; i++) {
         expect(dark[i], isNot(light[i]), reason: 'index $i');
       }

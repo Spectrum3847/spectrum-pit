@@ -12,6 +12,23 @@ Built with Flutter for iOS, Android, and desktop (Windows, macOS, Linux).
 
 Builds are attached to [this repo's releases](https://github.com/Spectrum3847/spectrum-pit/releases). They are unsigned, so each platform needs a step or two.
 
+### Check the download first
+
+Every artifact ships with a `.sha256` file next to it. Because these builds are unsigned, the instructions below ask you to click past your platform's own integrity check, so this is the only thing left that tells a good download from a corrupted or tampered one. Download both files into the same folder and run:
+
+```bash
+sha256sum -c App-Name.zip.sha256      # Linux, and Git Bash on Windows
+shasum -a 256 -c App-Name.zip.sha256  # macOS
+```
+
+```powershell
+# Windows PowerShell, if you would rather not install anything
+(Get-FileHash App-Name.zip -Algorithm SHA256).Hash -eq `
+  ((Get-Content App-Name.zip.sha256) -split '\s+')[0].ToUpper()
+```
+
+`OK` (or `True`) means the file is intact. Anything else means download it again, and do not run it.
+
 ### iOS (AltStore, SideStore, LiveContainer)
 
 Open Sources, add a source, and paste one of these URLs:

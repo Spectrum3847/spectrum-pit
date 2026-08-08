@@ -209,6 +209,8 @@ class _BorrowRow extends StatelessWidget {
                               ),
                               if (record.competition.isNotEmpty)
                                 _CompetitionLabel(name: record.competition),
+                              if (record.contact?.isNotEmpty ?? false)
+                                _ContactLabel(contact: record.contact!),
                             ],
                           ),
                         ],
@@ -293,6 +295,37 @@ class _CompetitionLabel extends StatelessWidget {
             ),
           ),
           TextSpan(text: name),
+        ],
+      ),
+      style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: muted),
+    );
+  }
+}
+
+class _ContactLabel extends StatelessWidget {
+  const _ContactLabel({required this.contact});
+
+  final String contact;
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = PitPalette.inkMutedOf(context);
+
+    final icon = contact.contains('@')
+        ? Icons.email_outlined
+        : Icons.call_outlined;
+
+    return Text.rich(
+      TextSpan(
+        children: <InlineSpan>[
+          WidgetSpan(
+            alignment: PlaceholderAlignment.middle,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Icon(icon, size: 14, color: muted),
+            ),
+          ),
+          TextSpan(text: contact),
         ],
       ),
       style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: muted),
@@ -537,6 +570,7 @@ class _BorrowEditorSheetState extends State<_BorrowEditorSheet> {
   late final TextEditingController _teamName;
   late final TextEditingController _teamNumber;
   late final TextEditingController _competition;
+  late final TextEditingController _contact;
   late DateTime _checkedOutAt;
   DateTime? _estimatedReturn;
 
@@ -550,6 +584,7 @@ class _BorrowEditorSheetState extends State<_BorrowEditorSheet> {
       text: record?.teamNumber.toString() ?? '',
     );
     _competition = TextEditingController(text: record?.competition ?? '');
+    _contact = TextEditingController(text: record?.contact ?? '');
     _checkedOutAt = record?.checkedOutAt ?? DateTime.now().toUtc();
     _estimatedReturn = record?.estimatedReturn;
   }
@@ -560,6 +595,7 @@ class _BorrowEditorSheetState extends State<_BorrowEditorSheet> {
     _teamName.dispose();
     _teamNumber.dispose();
     _competition.dispose();
+    _contact.dispose();
     super.dispose();
   }
 
@@ -576,6 +612,7 @@ class _BorrowEditorSheetState extends State<_BorrowEditorSheet> {
         teamName: _teamName.text.trim(),
         teamNumber: teamNumber,
         competition: _competition.text.trim(),
+        contact: _contact.text.trim().isEmpty ? null : _contact.text.trim(),
         checkedOutAt: _checkedOutAt,
         estimatedReturn: _estimatedReturn,
         checkedInAt: existing?.checkedInAt,
@@ -729,6 +766,14 @@ class _BorrowEditorSheetState extends State<_BorrowEditorSheet> {
                 decoration: const InputDecoration(
                   labelText: 'Competition',
                   hintText: 'Texas State Championship',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _contact,
+                decoration: const InputDecoration(
+                  labelText: 'Contact (optional)',
+                  hintText: 'Phone or email',
                 ),
               ),
               const SizedBox(height: 16),

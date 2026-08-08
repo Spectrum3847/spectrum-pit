@@ -4,7 +4,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:spectrumpit/src/services/debug_info.dart';
 import 'package:spectrumpit/src/services/telemetry_service.dart';
 
-// Every field the Firestore rules' isValidTelemetry allows.
 const _allowedKeys = {
   'id',
   'type',
@@ -41,16 +40,12 @@ void main() {
     );
     await service.setEnabled(true);
 
-    // A detail makes every optional key present, so the written key set is
-    // exactly the full whitelist below.
     await service.logEvent('app_open', detail: 'first-launch');
 
     final snap = await firestore.collection('telemetry').get();
     expect(snap.docs, hasLength(1));
     final data = snap.docs.single.data();
 
-    // Exact set equality against isValidTelemetry's whitelist (firestore.rules):
-    // if the rules' required fields change, this expected set must change too.
     expect(data.keys.toSet(), _allowedKeys);
     expect(data['type'], 'app_open');
     expect(data['deviceId'], isNotEmpty);
@@ -76,7 +71,7 @@ void main() {
 
       final data = (await firestore.collection('telemetry').get()).docs.single
           .data();
-      // Persisted values are clamped, not just the in-memory inputs.
+
       expect((data['type'] as String).length, 64);
       expect((data['detail'] as String).length, 128);
     },
@@ -108,7 +103,7 @@ void main() {
     final docs = (await firestore.collection('telemetry').get()).docs;
     expect(docs, hasLength(2));
     final ids = docs.map((d) => d.data()['deviceId']).toSet();
-    // A fresh instance reads the same persisted id, so only one distinct value.
+
     expect(ids, hasLength(1));
   });
 
@@ -136,10 +131,6 @@ void main() {
     expect(written!['detail'], 'Prematch');
   });
 
-  // #169: the stored preference has three states and only null means "never
-  // touched". false and null both mean "not collecting" now, but Settings shows
-  // them differently, so a refusal that decayed back to null would read as an
-  // untouched install and flip collection back on.
   group('storedPreference after a change', () {
     test('is false after the toggle is turned off, not null', () async {
       final service = TelemetryService(
@@ -163,9 +154,6 @@ void main() {
     });
   });
 
-  // #168: the maintainer's call is that both apps behave the same, and Strategy
-  // is opt-out. So an untouched install collects, and the Settings toggle is how
-  // somebody turns it off.
   group('opt-out default', () {
     test('an untouched install is enabled', () async {
       expect(await TelemetryService().isEnabled(), isTrue);
@@ -177,8 +165,6 @@ void main() {
     });
 
     test('storedPreference is null until the toggle is touched', () async {
-      // Settings uses this to tell "on by default" from "deliberately on".
-      // Nothing prompts on it any more.
       expect(await TelemetryService().storedPreference(), isNull);
       await TelemetryService().setEnabled(true);
       expect(await TelemetryService().storedPreference(), isTrue);
@@ -186,9 +172,6 @@ void main() {
   });
 
   test('an untouched install actually transmits', () async {
-    // isEnabled and logEvent read the same preference separately, and flipping
-    // only one left collection off for every untouched install while the toggle
-    // claimed otherwise (#168).
     final firestore = FakeFirebaseFirestore();
     final service = TelemetryService(
       firestore: firestore,

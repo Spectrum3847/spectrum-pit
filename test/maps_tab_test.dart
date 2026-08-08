@@ -53,16 +53,74 @@ InventoryItem _item(
 
 const _diagramSize = Size(1000, 600);
 
-/// 1x1 transparent PNG bytes: a `MemoryImage` needs real bytes to paint, but
-/// the tab reads its layout size from [MapDiagram.size], not by decoding
-/// this image, so a stand-in pixel is enough -- no temp file, no device.
 final Uint8List _transparentPng = Uint8List.fromList(<int>[
-  0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, //
-  0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-  0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00, 0x00, 0x00,
-  0x0A, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
-  0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49,
-  0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+  0x89,
+  0x50,
+  0x4E,
+  0x47,
+  0x0D,
+  0x0A,
+  0x1A,
+  0x0A,
+  0x00,
+  0x00,
+  0x00,
+  0x0D,
+  0x49,
+  0x48,
+  0x44,
+  0x52,
+  0x00,
+  0x00,
+  0x00,
+  0x01,
+  0x00,
+  0x00,
+  0x00,
+  0x01,
+  0x08,
+  0x06,
+  0x00,
+  0x00,
+  0x00,
+  0x1F,
+  0x15,
+  0xC4,
+  0x89,
+  0x00,
+  0x00,
+  0x00,
+  0x0A,
+  0x49,
+  0x44,
+  0x41,
+  0x54,
+  0x78,
+  0x9C,
+  0x63,
+  0x00,
+  0x01,
+  0x00,
+  0x00,
+  0x05,
+  0x00,
+  0x01,
+  0x0D,
+  0x0A,
+  0x2D,
+  0xB4,
+  0x00,
+  0x00,
+  0x00,
+  0x00,
+  0x49,
+  0x45,
+  0x4E,
+  0x44,
+  0xAE,
+  0x42,
+  0x60,
+  0x82,
 ]);
 
 MapDiagram _fakeDiagram({Size size = _diagramSize}) =>
@@ -103,7 +161,7 @@ void main() {
       authService: auth,
       syncService: inventorySync,
     );
-    // Cleanup runs only when the controller was actually constructed.
+
     addTearDown(mapController.dispose);
     addTearDown(inventoryController.dispose);
     await mapController.bootstrap();
@@ -158,7 +216,7 @@ void main() {
       pins: [
         _pin('a', name: 'Battery cart', x: 0.2, y: 0.3),
         _pin('b', name: 'Charging station', x: 0.7, y: 0.6),
-        // A pit pin must not render on the lab map.
+
         _pin('c', name: 'Pit-only pin', mapType: MapType.pit),
       ],
     );
@@ -167,8 +225,6 @@ void main() {
     expect(find.byIcon(Icons.location_on_outlined), findsNWidgets(2));
   });
 
-  // A pin is a painted glyph in a bare gesture area, so assistive tech saw a
-  // 48px box with no name, and the diagram itself read as nothing at all (#191).
   testWidgets('the diagram and its pins announce themselves', (tester) async {
     final handle = tester.ensureSemantics();
     imageStore.images[MapType.lab] = _fakeDiagram();
@@ -353,9 +409,6 @@ void main() {
     await tester.tap(find.text('Remove'));
     await tester.pump();
 
-    // The removal is still pending against the gate: reopening the menu must
-    // not let a second diagram operation start (change/remove race on the
-    // final _diagram value), so the options button is disabled.
     await tester.tap(find.byTooltip('Diagram options'));
     await tester.pumpAndSettle();
     expect(find.text('Remove diagram'), findsNothing);
@@ -380,22 +433,37 @@ void main() {
     await tester.tap(find.text('Remove'));
     await tester.pump();
 
-    // The lab removal is still pending against the gate. Switch to the pit
-    // map before it settles: the removal's completion must not blank the pit
-    // diagram just because it was started while the lab map was selected.
     await tester.tap(find.text('Pit'));
     await tester.pumpAndSettle();
     expect(find.text('No pit diagram set'), findsNothing);
-    // Store-level: the pending lab removal has not been applied yet.
+
     expect(imageStore.images[MapType.lab], isNotNull);
 
     gate.complete();
     await tester.pumpAndSettle();
 
     expect(find.text('No pit diagram set'), findsNothing);
-    // The lab removal applied once the gate settled; the pit diagram is
-    // untouched by a removal that was started for the lab map.
+
     expect(imageStore.images[MapType.lab], isNull);
     expect(imageStore.images[MapType.pit], isNotNull);
+  });
+
+  testWidgets('switching to the vehicle map shows its diagram without '
+      'touching the lab one', (tester) async {
+    imageStore.images[MapType.lab] = _fakeDiagram();
+    imageStore.nextPick = _fakeDiagram();
+    await pumpTab(tester);
+
+    await tester.tap(find.text('Vehicle'));
+    await tester.pumpAndSettle();
+    expect(find.text('No vehicle diagram set'), findsOneWidget);
+
+    await tester.tap(find.text('Choose diagram'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No vehicle diagram set'), findsNothing);
+
+    expect(imageStore.images[MapType.vehicle], isNotNull);
+    expect(imageStore.images[MapType.lab], isNotNull);
   });
 }

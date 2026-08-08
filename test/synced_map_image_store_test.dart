@@ -16,15 +16,74 @@ const MethodChannel _pathProviderChannel = MethodChannel(
   'plugins.flutter.io/path_provider',
 );
 
-// 1x1 transparent PNG: real bytes so MapDiagram.size's image decoder resolves
-// in the flutter_test VM, with no temp file and no device.
 final Uint8List _png = Uint8List.fromList(<int>[
-  0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, //
-  0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-  0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00, 0x00, 0x00,
-  0x0A, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
-  0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49,
-  0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+  0x89,
+  0x50,
+  0x4E,
+  0x47,
+  0x0D,
+  0x0A,
+  0x1A,
+  0x0A,
+  0x00,
+  0x00,
+  0x00,
+  0x0D,
+  0x49,
+  0x48,
+  0x44,
+  0x52,
+  0x00,
+  0x00,
+  0x00,
+  0x01,
+  0x00,
+  0x00,
+  0x00,
+  0x01,
+  0x08,
+  0x06,
+  0x00,
+  0x00,
+  0x00,
+  0x1F,
+  0x15,
+  0xC4,
+  0x89,
+  0x00,
+  0x00,
+  0x00,
+  0x0A,
+  0x49,
+  0x44,
+  0x41,
+  0x54,
+  0x78,
+  0x9C,
+  0x63,
+  0x00,
+  0x01,
+  0x00,
+  0x00,
+  0x05,
+  0x00,
+  0x01,
+  0x0D,
+  0x0A,
+  0x2D,
+  0xB4,
+  0x00,
+  0x00,
+  0x00,
+  0x00,
+  0x49,
+  0x45,
+  0x4E,
+  0x44,
+  0xAE,
+  0x42,
+  0x60,
+  0x82,
 ]);
 
 const String _r2KeyPref = 'pit_map_diagram_r2key_';
@@ -56,17 +115,12 @@ void main() {
     }
   });
 
-  // Keep photo uploads off the network: fakePhotoService stands in for the R2
-  // Worker, returning the bytes back out on fetch, and a picker that returns
-  // the tiny PNG stands in for the device photo library.
   PhotoService photoServiceReturningPng() => fakePhotoService(
     picker: (_) async => PickedPhoto(bytes: _png, contentType: 'image/png'),
   );
 
   group('SyncedMapImageStore.diagramFor', () {
     test('readKey throwing falls back to the locally cached diagram', () async {
-      // Phase 1: a successful pick seeds the local file cache so the maps tab
-      // still has bytes to paint later, and records the R2 key remotely.
       final seedSync = FakeMapDiagramSyncService();
       final store = SyncedMapImageStore(
         photoService: photoServiceReturningPng(),
@@ -76,8 +130,6 @@ void main() {
       expect(picked, isNotNull);
       expect(seedSync.writeCalls.single.key, 'key-0.jpg');
 
-      // Phase 2: a later read fails (offline / auth expired). The device must
-      // fall back to the cached file rather than showing nothing (#95).
       final offlineSync = FakeMapDiagramSyncService(
         readFailure: Exception('firestore read failed'),
       );
@@ -88,8 +140,7 @@ void main() {
       );
       final fallback = await offlineStore.diagramFor(MapType.lab);
       expect(fallback, isNotNull, reason: 'offline read should use the cache');
-      // The fallback came entirely from the local cache: no network request
-      // was issued by the photo service.
+
       expect(requests, isEmpty);
     });
 
@@ -106,11 +157,6 @@ void main() {
 
   group('SyncedMapImageStore.pickDiagram', () {
     test('persists the R2 key remotely before the local pointer', () async {
-      // If the remote write throws, the local SharedPreferences pointer and the
-      // cache file must NOT be left claiming a key the team never received
-      // (#95). This holds only when writeKey runs before _saveToCache and the
-      // prefs write; under the old order (local first) the cache file would
-      // already exist when writeKey threw.
       final sync = FakeMapDiagramSyncService(
         writeFailure: Exception('remote write failed'),
       );
@@ -142,8 +188,6 @@ void main() {
       var supportDirEmptyAtWriteTime = false;
       final sync = FakeMapDiagramSyncService(
         onWriteKey: (mapType, key) async {
-          // At the exact moment writeKey runs, _saveToCache has not yet written
-          // the file -- proving the remote write precedes the local persist.
           supportDirEmptyAtWriteTime = _appSupport.listSync().isEmpty;
         },
       );
@@ -189,15 +233,6 @@ void main() {
     });
 
     test('remote clear failure cleans up locally, then reports', () async {
-      // Each remote step is best-effort on its own (#161): a failed remote
-      // pointer clear must not prevent the local cache and preferences from
-      // being removed. The remote pointer survives, so the team still sees the
-      // diagram.
-      //
-      // It does throw at the end, though (#184). Completing quietly dropped the
-      // caller to the empty state while the diagram was still shared, so it
-      // reappeared on the next load. The maps tab already renders a throw as a
-      // "could not remove" notice.
       final sync = FakeMapDiagramSyncService(
         readKeyValue: 'key-0.jpg',
         clearFailure: Exception('remote clear failed'),
@@ -213,7 +248,6 @@ void main() {
         throwsA(isA<Exception>()),
       );
 
-      // The local cleanup still ran, in full, before the failure surfaced.
       expect(await sync.readKey(MapType.lab), 'key-0.jpg');
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getString('$_r2KeyPref${MapType.lab.name}'), isNull);

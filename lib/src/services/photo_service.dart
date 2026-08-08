@@ -68,6 +68,8 @@ class PhotoService {
   final LinkedHashMap<String, Uint8List> _cache =
       LinkedHashMap<String, Uint8List>();
 
+  final Map<String, Future<void>> _diskOps = <String, Future<void>>{};
+
   static bool get _isMobile =>
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.android ||
@@ -110,7 +112,9 @@ class PhotoService {
     _remember(key, photo.bytes);
 
     final disk = _diskCache;
-    if (disk != null) unawaited(disk.write(key, photo.bytes));
+    if (disk != null) {
+      unawaited(_queueDiskOp(key, () => disk.write(key, photo.bytes)));
+    }
     return key;
   }
 
@@ -135,14 +139,17 @@ class PhotoService {
     _remember(key, bytes);
 
     final disk = _diskCache;
-    if (disk != null) unawaited(disk.write(key, bytes));
+    if (disk != null) {
+      unawaited(_queueDiskOp(key, () => disk.write(key, bytes)));
+    }
     return bytes;
   }
 
   Future<void> delete(String key) async {
     _cache.remove(key);
 
-    await _diskCache?.remove(key);
+    final disk = _diskCache;
+    if (disk != null) await _queueDiskOp(key, () => disk.remove(key));
     final response = await _send(
       http.Request('DELETE', _baseUrl.resolve('/photos/$key')),
     );
@@ -183,6 +190,23 @@ class PhotoService {
         'Could not $verb the photo (storage returned ${response.statusCode}).',
       ),
     };
+  }
+
+  Future<void> _queueDiskOp(String key, Future<void> Function() action) {
+    final previous = _diskOps[key];
+    late final Future<void> next;
+    next = () async {
+      try {
+        await previous;
+      } catch (_) {}
+      try {
+        await action();
+      } finally {
+        if (identical(_diskOps[key], next)) _diskOps.remove(key);
+      }
+    }();
+    _diskOps[key] = next;
+    return next;
   }
 
   void _remember(String key, Uint8List bytes) {

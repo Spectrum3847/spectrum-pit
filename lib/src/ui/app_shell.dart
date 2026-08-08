@@ -1,8 +1,9 @@
-import 'dart:async' show unawaited;
+import 'dart:async' show Timer, unawaited;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../services/container_photo_sync_service.dart';
 import '../services/issue_report_service.dart';
 import '../services/map_image_store.dart';
 import '../services/photo_service.dart';
@@ -37,6 +38,7 @@ class AppShell extends StatefulWidget {
     required this.borrowController,
     required this.mapLocationController,
     required this.mapImageStore,
+    required this.containerPhotoSyncService,
     required this.photoService,
     required this.pitShiftController,
     this.issueReportService,
@@ -52,6 +54,7 @@ class AppShell extends StatefulWidget {
   final BorrowController borrowController;
   final MapLocationController mapLocationController;
   final MapImageStore mapImageStore;
+  final ContainerPhotoSyncService containerPhotoSyncService;
   final PhotoService photoService;
   final PitShiftController pitShiftController;
   final IssueReportService? issueReportService;
@@ -105,16 +108,24 @@ const _kTabMeta = [
 class _AppShellState extends State<AppShell> {
   int _index = 0;
 
+  Timer? _overdueTick;
+
   @override
   void initState() {
     super.initState();
     widget.userRoleController.addListener(_onRoleChanged);
+    widget.borrowController.addListener(_onBorrowChanged);
+    _overdueTick = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() {});
+    });
     _clampIndex();
   }
 
   @override
   void dispose() {
     widget.userRoleController.removeListener(_onRoleChanged);
+    widget.borrowController.removeListener(_onBorrowChanged);
+    _overdueTick?.cancel();
     super.dispose();
   }
 
@@ -167,6 +178,10 @@ class _AppShellState extends State<AppShell> {
     setState(() {});
   }
 
+  void _onBorrowChanged() {
+    setState(() {});
+  }
+
   Future<void> _openSignIn() async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
@@ -179,11 +194,15 @@ class _AppShellState extends State<AppShell> {
   }
 
   List<NavigationDestination> _buildDestinations() {
+    final overdueCount = widget.borrowController.overdueCount;
     return _featureTabIndices.map((i) {
       final m = _kTabMeta[i];
+      final showBadge = i == AppTabs.borrowed && overdueCount > 0;
+      Widget withBadge(Icon icon) =>
+          showBadge ? Badge(label: Text('$overdueCount'), child: icon) : icon;
       return NavigationDestination(
-        icon: Icon(m.icon),
-        selectedIcon: Icon(m.selectedIcon),
+        icon: withBadge(Icon(m.icon)),
+        selectedIcon: withBadge(Icon(m.selectedIcon)),
         label: m.label,
       );
     }).toList();
@@ -230,7 +249,9 @@ class _AppShellState extends State<AppShell> {
       case AppTabs.packing:
         return PackingTab(
           controller: widget.packingController,
+          inventoryController: widget.inventoryController,
           photoService: widget.photoService,
+          containerPhotoSyncService: widget.containerPhotoSyncService,
         );
       case AppTabs.borrowed:
         return BorrowTab(controller: widget.borrowController);

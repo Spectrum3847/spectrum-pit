@@ -68,8 +68,7 @@ void main() {
       expect(shift.startsAt, isNull);
       expect(shift.endsAt, isNull);
       expect(shift.notes, isNull);
-      // Absent updatedAt falls back to the Unix epoch in UTC, matching the
-      // other pit models.
+
       expect(
         shift.updatedAt,
         DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
@@ -295,7 +294,7 @@ void main() {
     test('a shift never conflicts with itself', () {
       final a = _shift('a', startMatch: 1, endMatch: 20);
       expect(a.conflictsWith(a), isFalse);
-      // Same id, different content: still the same shift.
+
       expect(a.conflictsWith(a.copyWith(label: 'Edited')), isFalse);
     });
 
@@ -311,11 +310,6 @@ void main() {
     });
 
     test('an inverted match range still conflicts through its edges', () {
-      // The editor refuses inverted ranges (start > end), but if one reaches
-      // conflict detection the bounds are compared as-is: it overlaps any
-      // range that touches both edges and no range sitting entirely between
-      // them. A range touching only one edge does not conflict -- the overlap
-      // math needs a span from the lower bound through the upper bound.
       final inverted = _shift('a', startMatch: 20, endMatch: 5);
       expect(
         inverted.conflictsWith(_shift('b', startMatch: 1, endMatch: 30)),
