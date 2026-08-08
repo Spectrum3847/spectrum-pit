@@ -82,7 +82,6 @@ void main() {
     expect(controller.items.single.id, 'a');
     expect(sync.upserts.single.id, 'a');
 
-    // A fresh controller reads the same mock store, proving it persisted.
     final reopened = PackingController(
       authService: FakeSpectrumAuthService(),
       syncService: FakePackingSyncService(),
@@ -129,7 +128,6 @@ void main() {
       sync.emit([_item('y'), _item('z')]);
       await Future<void>.delayed(Duration.zero);
 
-      // Still the pre-sign-out list; the superseded stream cannot clobber it.
       expect(controller.items.map((i) => i.id), ['x']);
       controller.dispose();
     },
@@ -147,8 +145,6 @@ void main() {
     sync.emit([_item('x')]);
     await Future<void>.delayed(Duration.zero);
 
-    // A double subscription would still land a consistent single list, and
-    // the single emission produces exactly one notification.
     expect(controller.items.map((i) => i.id), ['x']);
     expect(notified, 1);
     controller.dispose();
@@ -163,8 +159,6 @@ void main() {
 
     controller.dispose();
 
-    // Emitting after dispose must not reach the (cancelled) listener, which
-    // would otherwise notifyListeners on a disposed ChangeNotifier and throw.
     sync.emit([_item('x')]);
     await Future<void>.delayed(Duration.zero);
   });
@@ -180,8 +174,6 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect(controller.items.map((i) => i.id), ['x']);
 
-    // Capture debugPrint so the test proves onError actually ran, rather than
-    // passing just because an unhandled stream error goes unnoticed here.
     final logged = <String>[];
     final original = debugPrint;
     debugPrint = (String? message, {int? wrapWidth}) =>
@@ -191,7 +183,6 @@ void main() {
     sync.emitError(Exception('permission-denied'));
     await Future<void>.delayed(Duration.zero);
 
-    // The error must not tear the controller down or discard what it had.
     expect(controller.items.map((i) => i.id), ['x']);
     expect(
       logged.where((m) => m.contains('PackingController sync stream error')),
@@ -206,7 +197,6 @@ void main() {
       syncService: sync,
     );
 
-    // Do not await: dispose lands while bootstrap is still reading the cache.
     final booting = controller.bootstrap();
     controller.dispose();
 

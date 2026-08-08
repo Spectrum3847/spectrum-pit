@@ -38,9 +38,6 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
 
-  // Builds a signed-in, bootstrapped controller and (optionally) seeds it via a
-  // realtime emission, then pumps the tab under the app theme on a tall surface
-  // so the list builds every row.
   Future<void> pumpTab(WidgetTester tester, List<InventoryItem> seed) async {
     tester.view.physicalSize = const Size(1000, 2200);
     tester.view.devicePixelRatio = 1.0;
@@ -51,7 +48,7 @@ void main() {
       authService: FakeSpectrumAuthService(initialUser: _signedInUser),
       syncService: sync,
     );
-    // Cleanup runs only when initialization reached the assignment.
+
     addTearDown(controller.dispose);
     await controller.bootstrap();
     if (seed.isNotEmpty) sync.emit(seed);
@@ -81,17 +78,17 @@ void main() {
 
     expect(find.text('Cordless Drill'), findsOneWidget);
     expect(find.text('Crimper'), findsOneWidget);
-    // Codes render in mono, uppercase (The Stencil Rule).
+
     expect(find.text('RC1-DB'), findsOneWidget);
     expect(find.text('CAB-A2'), findsOneWidget);
-    // Status renders as a labelled tag, never color alone.
+
     expect(find.text('In Lab'), findsOneWidget);
     expect(find.text('In Pit'), findsOneWidget);
   });
 
   testWidgets('empty locations render a dash placeholder', (tester) async {
     await pumpTab(tester, [_item('a', name: 'Loose Bolt')]);
-    expect(find.text('--'), findsNWidgets(2)); // both lab and pit empty
+    expect(find.text('--'), findsNWidgets(2));
   });
 
   testWidgets('search filters by name', (tester) async {
@@ -126,7 +123,7 @@ void main() {
     await pumpTab(tester, const <InventoryItem>[]);
 
     expect(find.text('The board is empty'), findsOneWidget);
-    // Only the empty-state button (the FAB is hidden while the board is empty).
+
     expect(find.text('Add tool'), findsOneWidget);
   });
 
@@ -138,7 +135,6 @@ void main() {
     await tester.tap(find.text('In Lab'));
     await tester.pumpAndSettle();
 
-    // inLab -> inPit, written optimistically and recorded on the sync service.
     expect(controller.items.single.status, InventoryStatus.inPit);
     expect(sync.upserts.last.id, 'a');
     expect(sync.upserts.last.status, InventoryStatus.inPit);
@@ -178,8 +174,6 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Two 'Add tool' labels now exist (the empty board button behind the sheet
-    // and the sheet's save button); the sheet is last in the overlay.
     await tester.tap(find.text('Add tool').last);
     await tester.pumpAndSettle();
 
@@ -189,9 +183,7 @@ void main() {
     expect(saved.labLocation, 'RC3');
     expect(saved.pitLocation, 'CAB-C1');
     expect(saved.status, InventoryStatus.inLab);
-    // New records get a UUID v4, never a timestamp-derived id (#161). Matched on
-    // shape rather than merely non-empty, which 'new-item' would also satisfy
-    // (#169).
+
     expect(saved.id, isNot(startsWith('inv_')));
     expect(
       saved.id,

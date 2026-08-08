@@ -168,8 +168,6 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect(controller.items.map((i) => i.id), ['x']);
 
-    // Capture debugPrint so the test proves onError actually ran, rather than
-    // passing just because an unhandled stream error goes unnoticed here.
     final logged = <String>[];
     final original = debugPrint;
     debugPrint = (String? message, {int? wrapWidth}) =>
@@ -179,7 +177,6 @@ void main() {
     sync.emitError(Exception('permission-denied'));
     await Future<void>.delayed(Duration.zero);
 
-    // The error must not tear the controller down or discard what it had.
     expect(controller.items.map((i) => i.id), ['x']);
     expect(
       logged.where(
@@ -197,7 +194,6 @@ void main() {
       syncService: sync,
     );
 
-    // Do not await: dispose lands while bootstrap is still reading the cache.
     final booting = controller.bootstrap();
     controller.dispose();
 

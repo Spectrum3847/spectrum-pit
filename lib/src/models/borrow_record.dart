@@ -8,6 +8,7 @@ class BorrowRecord implements PitModel {
     required this.teamName,
     required this.teamNumber,
     required this.competition,
+    this.contact,
     required this.checkedOutAt,
     this.estimatedReturn,
     this.checkedInAt,
@@ -22,6 +23,7 @@ class BorrowRecord implements PitModel {
   final String teamName;
   final int teamNumber;
   final String competition;
+  final String? contact;
   final DateTime checkedOutAt;
   final DateTime? estimatedReturn;
   final DateTime? checkedInAt;
@@ -41,6 +43,7 @@ class BorrowRecord implements PitModel {
       teamName: data['teamName'] as String? ?? '',
       teamNumber: data['teamNumber'] as int? ?? 0,
       competition: data['competition'] as String? ?? '',
+      contact: data['contact'] as String?,
       checkedOutAt:
           DateTime.tryParse(data['checkedOutAt'] as String? ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
@@ -64,6 +67,7 @@ class BorrowRecord implements PitModel {
     'teamName': teamName,
     'teamNumber': teamNumber,
     'competition': competition,
+    if (contact != null) 'contact': contact,
     'checkedOutAt': checkedOutAt.toIso8601String(),
     if (estimatedReturn != null)
       'estimatedReturn': estimatedReturn!.toIso8601String(),
@@ -78,6 +82,7 @@ class BorrowRecord implements PitModel {
     String? teamName,
     int? teamNumber,
     String? competition,
+    String? contact,
     DateTime? checkedOutAt,
     DateTime? estimatedReturn,
     DateTime? checkedInAt,
@@ -91,6 +96,7 @@ class BorrowRecord implements PitModel {
       teamName: teamName ?? this.teamName,
       teamNumber: teamNumber ?? this.teamNumber,
       competition: competition ?? this.competition,
+      contact: contact ?? this.contact,
       checkedOutAt: checkedOutAt ?? this.checkedOutAt,
       estimatedReturn: estimatedReturn ?? this.estimatedReturn,
       checkedInAt: checkedInAt ?? this.checkedInAt,

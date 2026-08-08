@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:spectrumpit/src/app.dart';
 import 'support/fake_borrow_sync_service.dart';
+import 'support/fake_container_photo_sync_service.dart';
 import 'support/fake_inventory_sync_service.dart';
 import 'support/fake_map_image_store.dart';
 import 'support/fake_map_location_sync_service.dart';
@@ -21,8 +22,6 @@ import 'package:spectrumpit/src/state/user_role_controller.dart';
 import 'support/fake_spectrum_auth_service.dart';
 import 'support/fake_user_role_service.dart';
 
-/// Fails the first bootstrap (auth initialize) once, then succeeds, so the
-/// retry path can be exercised.
 class _FailingOnceAuth extends FakeSpectrumAuthService {
   bool failNext = true;
 
@@ -36,8 +35,6 @@ class _FailingOnceAuth extends FakeSpectrumAuthService {
   }
 }
 
-// A failed bootstrap used to leave the startup spinner up forever (#525).
-// Now it must surface an error screen whose retry re-runs the bootstrap.
 void main() {
   testWidgets('bootstrap failure shows the error screen and retry recovers', (
     tester,
@@ -70,6 +67,7 @@ void main() {
           syncService: FakeMapLocationSyncService(),
         ),
         mapImageStore: FakeMapImageStore(),
+        containerPhotoSyncService: FakeContainerPhotoSyncService(),
         photoService: unavailablePhotoService(),
         pitShiftController: PitShiftController(
           authService: auth,
@@ -82,17 +80,12 @@ void main() {
     expect(find.text('Spectrum Pit could not start'), findsOneWidget);
     expect(find.textContaining('simulated storage failure'), findsOneWidget);
 
-    // Invoke the retry callback directly: StrategyApp owns its theme, so the
-    // splash-disabling workaround widget_test.dart uses for real taps is not
-    // available here.
     final retry = tester.widget<FilledButton>(
       find.widgetWithText(FilledButton, 'Try again'),
     );
     retry.onPressed!();
     await tester.pumpAndSettle();
 
-    // The second initialize succeeds, so the app reaches the shell (signed
-    // out, so the access gate is what renders).
     expect(find.text('Spectrum Pit could not start'), findsNothing);
     expect(find.text('You do not have access.'), findsOneWidget);
   });

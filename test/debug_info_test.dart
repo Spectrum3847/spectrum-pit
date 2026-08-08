@@ -36,14 +36,13 @@ void main() {
   );
 
   test('reportVersion always carries the commit, plus branch and date', () {
-    // Release-style build: commit + branch, no date.
     expect(_info().reportVersion, '1.2.3+9 (a1b2c3d master)');
-    // Nightly-style build: commit + branch + date.
+
     expect(
       _info(buildDate: '2026-07-06').reportVersion,
       '1.2.3+9 (a1b2c3d master 2026-07-06)',
     );
-    // Local build: no commit injected.
+
     expect(
       _info(gitCommit: '', gitBranch: '').reportVersion,
       '1.2.3+9 (local build)',

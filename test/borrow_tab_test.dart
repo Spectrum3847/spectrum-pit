@@ -19,12 +19,14 @@ BorrowRecord _record(
   int teamNumber = 254,
   bool returned = false,
   DateTime? estimatedReturn,
+  String? contact,
 }) => BorrowRecord(
   id: id,
   toolName: toolName,
   teamName: teamName,
   teamNumber: teamNumber,
   competition: 'Texas States',
+  contact: contact,
   checkedOutAt: DateTime.utc(2026, 3, 1, 10),
   estimatedReturn: estimatedReturn,
   returned: returned,
@@ -40,7 +42,7 @@ Future<BorrowController> _makeController({
     authService: FakeSpectrumAuthService(initialUser: _user),
     syncService: sync,
   );
-  // Cleanup runs even when an expectation fails later.
+
   addTearDown(controller.dispose);
   await controller.bootstrap();
   if (initial.isNotEmpty) sync.emit(initial);
@@ -75,8 +77,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Drill'), findsOneWidget);
-    // The team line is one rich paragraph so it can wrap at large text
-    // settings (#193), so the number lives in a span rather than its own Text.
+
     expect(find.textContaining('254', findRichText: true), findsOneWidget);
   });
 
@@ -125,8 +126,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Check out tool'), findsWidgets);
-    // Should have text fields for tool name, team name, team number, competition
-    expect(find.byType(TextField), findsNWidgets(4));
+
+    expect(find.byType(TextField), findsNWidgets(5));
   });
 
   testWidgets('checkout editor creates a new record', (tester) async {
@@ -137,14 +138,15 @@ void main() {
     await tester.tap(find.byType(FloatingActionButton));
     await tester.pumpAndSettle();
 
-    // Fill in the form
     final fields = find.byType(TextField);
     await tester.enterText(fields.at(0), 'Wrench');
     await tester.enterText(fields.at(1), 'The Cheesy Poofs');
     await tester.enterText(fields.at(2), '254');
     await tester.enterText(fields.at(3), 'Texas States');
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Check out'));
+    final checkOutButton = find.widgetWithText(FilledButton, 'Check out');
+    await tester.ensureVisible(checkOutButton);
+    await tester.tap(checkOutButton);
     await tester.pumpAndSettle();
 
     expect(controller.items.length, 1);
@@ -180,8 +182,6 @@ void main() {
     await tester.tap(find.byIcon(Icons.delete_outline_rounded));
     await tester.pumpAndSettle();
 
-    // Confirm dialog: the Delete action is the dialog's FilledButton, not the
-    // sheet's delete icon (whose tooltip is also 'Delete').
     await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
     await tester.pumpAndSettle();
 
@@ -196,7 +196,7 @@ void main() {
           'a',
           toolName: 'Drill',
           returned: false,
-          estimatedReturn: DateTime.utc(2026, 1, 1), // already past
+          estimatedReturn: DateTime.utc(2026, 1, 1),
         ),
       ],
     );
@@ -204,6 +204,33 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Overdue'), findsOneWidget);
+  });
+
+  testWidgets('contact shows a phone icon for a plain number', (tester) async {
+    final controller = await _makeController(
+      initial: [_record('a', contact: '555-0100')],
+    );
+    await tester.pumpWidget(_wrap(controller));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('555-0100', findRichText: true), findsOneWidget);
+    expect(find.byIcon(Icons.call_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.email_outlined), findsNothing);
+  });
+
+  testWidgets('contact shows an email icon for an address', (tester) async {
+    final controller = await _makeController(
+      initial: [_record('a', contact: 'pit@team.org')],
+    );
+    await tester.pumpWidget(_wrap(controller));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('pit@team.org', findRichText: true),
+      findsOneWidget,
+    );
+    expect(find.byIcon(Icons.email_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.call_outlined), findsNothing);
   });
 
   testWidgets('active loans sort above returned ones', (tester) async {
@@ -216,13 +243,11 @@ void main() {
     await tester.pumpWidget(_wrap(controller));
     await tester.pumpAndSettle();
 
-    // The list should show active first, then returned
     final activeFinder = find.text('Active Tool');
     final returnedFinder = find.text('Returned Tool');
     expect(activeFinder, findsOneWidget);
     expect(returnedFinder, findsOneWidget);
 
-    // Active should appear before returned in the widget tree
     final activeBox = tester.getCenter(activeFinder);
     final returnedBox = tester.getCenter(returnedFinder);
     expect(activeBox.dy, lessThan(returnedBox.dy));

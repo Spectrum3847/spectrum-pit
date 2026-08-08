@@ -67,10 +67,20 @@ service cloud.firestore {
     match /mapDiagrams/{mapType} {
       allow read: if isAuthed() && isMember();
       allow create: if isAuthed() && isMember()
-        && mapType in ['lab', 'pit']
+        && mapType in ['lab', 'pit', 'vehicle']
         && isValidMapDiagram(request.resource.data);
       allow update: if isAuthed() && isMember()
         && isValidMapDiagram(request.resource.data)
+        && isMonotonicUpdate(resource.data, request.resource.data);
+      allow delete: if isAuthed() && isMember();
+    }
+
+    match /containerPhotos/{docId} {
+      allow read: if isAuthed() && isMember();
+      allow create: if isAuthed() && isMember()
+        && isValidContainerPhoto(request.resource.data);
+      allow update: if isAuthed() && isMember()
+        && isValidContainerPhoto(request.resource.data)
         && isMonotonicUpdate(resource.data, request.resource.data);
       allow delete: if isAuthed() && isMember();
     }
@@ -200,7 +210,8 @@ service cloud.firestore {
         && data.itemId is string
         && data.itemId.size() > 0
         && data.itemId.size() <= 256
-        && data.packingStatus in ['packing', 'staging', 'loading', 'ready']
+        && data.packingStatus in ['notStarted', 'packing', 'staging',
+              'loading', 'ready']
         && (!('photoRef' in data)
             || (data.photoRef is string && data.photoRef.size() <= 512))
         && isSaneTimestamp(data.updatedAt);
@@ -208,8 +219,8 @@ service cloud.firestore {
 
     function isValidBorrowRecord(data) {
       return data.keys().hasOnly(['itemId', 'toolName', 'teamName',
-              'teamNumber', 'competition', 'checkedOutAt', 'estimatedReturn',
-              'checkedInAt', 'returned', 'updatedAt'])
+              'teamNumber', 'competition', 'contact', 'checkedOutAt',
+              'estimatedReturn', 'checkedInAt', 'returned', 'updatedAt'])
         && data.toolName is string
         && data.toolName.size() > 0
         && data.toolName.size() <= 256
@@ -225,6 +236,8 @@ service cloud.firestore {
         && isSaneTimestamp(data.updatedAt)
         && (!('itemId' in data)
             || (data.itemId is string && data.itemId.size() <= 256))
+        && (!('contact' in data)
+            || (data.contact is string && data.contact.size() <= 256))
         && (!('estimatedReturn' in data)
             || isSaneTimestamp(data.estimatedReturn))
         && (!('checkedInAt' in data)
@@ -237,7 +250,7 @@ service cloud.firestore {
         && data.name is string
         && data.name.size() > 0
         && data.name.size() <= 256
-        && data.mapType in ['lab', 'pit']
+        && data.mapType in ['lab', 'pit', 'vehicle']
         && data.x is number
         && data.x >= 0
         && data.x <= 1
@@ -255,6 +268,17 @@ service cloud.firestore {
         && data.diagramKey is string
         && data.diagramKey.size() > 0
         && data.diagramKey.size() <= 512
+        && isSaneTimestamp(data.updatedAt);
+    }
+
+    function isValidContainerPhoto(data) {
+      return data.keys().hasOnly(['location', 'photoRef', 'updatedAt'])
+        && data.location is string
+        && data.location.size() > 0
+        && data.location.size() <= 256
+        && data.photoRef is string
+        && data.photoRef.size() > 0
+        && data.photoRef.size() <= 512
         && isSaneTimestamp(data.updatedAt);
     }
 

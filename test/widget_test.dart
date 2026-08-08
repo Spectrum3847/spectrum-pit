@@ -22,6 +22,7 @@ import 'package:spectrumpit/src/state/user_role_controller.dart';
 import 'package:spectrumpit/src/ui/app_shell.dart';
 
 import 'support/fake_spectrum_auth_service.dart';
+import 'support/fake_container_photo_sync_service.dart';
 import 'support/fake_user_role_service.dart';
 
 Future<AppShell> _buildShell(
@@ -68,13 +69,13 @@ Future<AppShell> _buildShell(
     borrowController: borrowController,
     mapLocationController: mapLocationController,
     mapImageStore: FakeMapImageStore(),
+    containerPhotoSyncService: FakeContainerPhotoSyncService(),
     photoService: unavailablePhotoService(),
     pitShiftController: pitShiftController,
   );
 
   await tester.pumpWidget(
     MaterialApp(
-      // Disable ink splash to avoid shader-format mismatch in the test engine.
       theme: ThemeData(splashFactory: NoSplash.splashFactory),
       home: shell,
     ),
@@ -92,7 +93,7 @@ void main() {
     expect(find.text('Spectrum Pit'), findsOneWidget);
     expect(find.text('You do not have access.'), findsOneWidget);
     expect(find.byType(NavigationBar), findsNothing);
-    // Signed out: the gate offers a sign-in action in its body (#427).
+
     expect(
       find.widgetWithText(FilledButton, 'Sign in with Google'),
       findsOneWidget,
@@ -128,7 +129,7 @@ void main() {
       find.descendant(of: navBar, matching: find.text('Schedule')),
       findsOneWidget,
     );
-    // Secondary surfaces moved out of the bar into the overflow menu (#98).
+
     expect(
       find.descendant(of: navBar, matching: find.text('Docs')),
       findsNothing,
@@ -152,7 +153,7 @@ void main() {
 
     expect(find.text('Docs'), findsOneWidget);
     expect(find.text('Settings'), findsOneWidget);
-    // Non-admins never see the Users surface.
+
     expect(find.text('Users'), findsNothing);
   });
 
@@ -184,8 +185,6 @@ void main() {
     expect(find.text('Settings'), findsOneWidget);
   });
 
-  // A phone is a ship target, so the bar has to lay out at 360dp with its
-  // labels intact. Five destinations is the widest it ever gets (#98).
   testWidgets('Feature destinations lay out at phone width', (tester) async {
     tester.view.physicalSize = const Size(360, 800);
     tester.view.devicePixelRatio = 1.0;
@@ -213,8 +212,6 @@ void main() {
     expect(find.text('Appearance'), findsOneWidget);
   });
 
-  // Every feature tab sits in the shell's IndexedStack at once, so their FABs
-  // used to share the default hero tag and any pushed route asserted.
   testWidgets('Pushing a route off the shell does not trip the hero assert', (
     tester,
   ) async {
@@ -231,8 +228,7 @@ void main() {
     tester,
   ) async {
     const user = SpectrumUser(uid: 'new-uid', displayName: 'New User');
-    // No userRoles passed => FakeUserRoleService auto-assigns viewer, the
-    // no-access default until an admin promotes the account (#334).
+
     await _buildShell(tester, signedInUser: user);
 
     expect(find.byType(NavigationBar), findsNothing);
@@ -241,16 +237,13 @@ void main() {
       find.text('Ask an admin to approve your account (New User).'),
       findsOneWidget,
     );
-    // Already signed in: no second sign-in action, they need an admin (#427).
+
     expect(
       find.widgetWithText(FilledButton, 'Sign in with Google'),
       findsNothing,
     );
   });
 
-  // #115: both desktop guidelines this app is measured against treat full
-  // keyboard operation as a requirement, and the app ships desktop builds. There
-  // was no keyboard path to the destinations at all.
   group('keyboard destination navigation', () {
     Future<void> press(WidgetTester tester, LogicalKeyboardKey key) async {
       await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
@@ -291,8 +284,6 @@ void main() {
           .destinations
           .length;
 
-      // Back from the first lands on the last: stopping there would make the
-      // shortcut feel broken, and there is no ordering meaning to preserve.
       await press(tester, LogicalKeyboardKey.bracketLeft);
       expect(selected(tester), count - 1);
 

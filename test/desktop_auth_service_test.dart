@@ -11,7 +11,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:spectrumpit/src/services/desktop_auth_service.dart';
 import 'package:spectrumpit/src/services/spectrum_auth_service.dart';
 
-/// A mocked Identity Toolkit + Secure Token backend.
 MockClient _firebaseBackend({int refreshStatus = 200}) {
   return MockClient((request) async {
     if (request.url.host == 'securetoken.googleapis.com') {
@@ -40,6 +39,15 @@ MockClient _firebaseBackend({int refreshStatus = 200}) {
       200,
     );
   });
+}
+
+class _ThrowingSignOutSession extends fc.FirebaseAuthSession {
+  _ThrowingSignOutSession({required super.apiKey, required super.httpClient});
+
+  @override
+  Future<void> signOut() async {
+    throw const SocketException('sign-out unreachable');
+  }
 }
 
 DesktopAuthService _service({int refreshStatus = 200}) {
@@ -80,8 +88,7 @@ void main() {
       addTearDown(sub.cancel);
 
       await service.signIn();
-      // The broadcast stream delivers asynchronously; flush the queue so the
-      // signedIn emission has reached the listener before asserting.
+
       await Future<void>.delayed(Duration.zero);
 
       expect(
@@ -186,8 +193,6 @@ void main() {
     expect(ended, <String>['uid-gone']);
   });
 
-  // A payload that decodes but carries the wrong type throws inside restore(),
-  // which is not a network failure. Kept, it would throw on every later launch.
   test('initialize drops a payload with a wrong-typed refresh token', () async {
     SharedPreferences.setMockInitialValues(<String, Object>{
       'desktop_auth_session_v1': jsonEncode({
@@ -203,14 +208,10 @@ void main() {
     expect(service.snapshot.state, SpectrumAuthState.signedOut);
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getString('desktop_auth_session_v1'), isNull);
-    // The uid is still readable, so that user's cached documents go too.
+
     expect(ended, <String>['uid-9']);
   });
 
-  // Spectrum3847/SpectrumStrategy#824: the token endpoint being unreachable is
-  // not the refresh token being refused, so the stored session has to survive a
-  // launch with no network. firestore_client 0.2.0 resolves the persisted user,
-  // so the app comes up signed in and reads come from the offline cache.
   test('initialize stays signed in when the network fails', () async {
     SharedPreferences.setMockInitialValues(<String, Object>{
       'desktop_auth_session_v1': jsonEncode({
@@ -236,14 +237,10 @@ void main() {
     expect(service.currentUser?.uid, 'uid-9');
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getString('desktop_auth_session_v1'), isNotNull);
-    // Null rather than a thrown SocketException: the photo Worker reads this
-    // and treats a null token as nothing to send, so an offline launch has no
-    // token to attach instead of an error to surface.
+
     expect(await service.idToken(), isNull);
   });
 
-  // A payload that cannot be decoded would throw on every later launch, so it
-  // is the one failure that does clear the key.
   test('initialize drops a corrupt stored payload', () async {
     SharedPreferences.setMockInitialValues(<String, Object>{
       'desktop_auth_session_v1': 'not json at all',
@@ -256,10 +253,6 @@ void main() {
     expect(prefs.getString('desktop_auth_session_v1'), isNull);
   });
 
-  // A refresh refused mid-session ends the session inside firestore_client. Only
-  // the restore path used to notice, so the app kept looking signed in with the
-  // stored payload and that user's cached documents on disk until the next
-  // launch (#204).
   test('a refresh refused mid-session signs the app out', () async {
     var now = DateTime.utc(2026, 1, 1, 12);
     final endedFor = <String>[];
@@ -280,13 +273,10 @@ void main() {
     await service.signIn();
     expect(service.snapshot.state, SpectrumAuthState.signedIn);
 
-    // Walk past the token's hour so the next read refreshes rather than
-    // returning the cached one, and the mocked endpoint refuses it.
     now = now.add(const Duration(hours: 2));
     expect(await service.idToken(), isNull);
-    // authStateChanges is a broadcast stream, so the teardown it triggers lands
-    // a microtask later.
-    await Future<void>.delayed(Duration.zero);
+
+    await pumpEventQueue();
 
     expect(service.snapshot.state, SpectrumAuthState.signedOut);
     expect(endedFor, <String>['uid-9']);
@@ -294,9 +284,6 @@ void main() {
     expect(prefs.getString('desktop_auth_session_v1'), isNull);
   });
 
-  // The deliberate sign-out and the revoked-token listener both tear the session
-  // down, and firestore_client's signOut() emits on authStateChanges, so without
-  // a guard one sign-out would run the cleanup twice.
   test('signOut tears the session down exactly once', () async {
     final endedFor = <String>[];
     final service = _service();
@@ -305,16 +292,62 @@ void main() {
     await service.initialize();
     await service.signIn();
     await service.signOut();
-    await Future<void>.delayed(Duration.zero);
+    await pumpEventQueue();
 
     expect(service.snapshot.state, SpectrumAuthState.signedOut);
     expect(endedFor, <String>['uid-9']);
   });
 
-  // The bootstrap retry calls initialize() again, and two overlapping calls could
-  // both pass the cancel before either assigned. The losing subscription would
-  // stay live with nothing holding it, so dispose() could not cancel it and a
-  // revoked token would run the teardown twice.
+  test('a sign-out that throws still ends the session', () async {
+    final endedFor = <String>[];
+    final service = DesktopAuthService(
+      clientId: 'client-123',
+      firebaseApiKey: 'fake-key',
+      session: _ThrowingSignOutSession(
+        apiKey: 'fake-key',
+        httpClient: _firebaseBackend(),
+      ),
+      signInFlow: () async => const fc.GoogleTokens(idToken: 'google-id-token'),
+    );
+    addTearDown(service.dispose);
+    service.onSessionEnded = (uid) async => endedFor.add(uid);
+
+    await service.initialize();
+    await service.signIn();
+    await service.signOut();
+    await pumpEventQueue();
+
+    expect(service.snapshot.state, SpectrumAuthState.signedOut);
+    expect(endedFor, <String>['uid-9']);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('desktop_auth_session_v1'), isNull);
+  });
+
+  test('the service still works after a sign-out that threw', () async {
+    final endedFor = <String>[];
+    final service = DesktopAuthService(
+      clientId: 'client-123',
+      firebaseApiKey: 'fake-key',
+      session: _ThrowingSignOutSession(
+        apiKey: 'fake-key',
+        httpClient: _firebaseBackend(),
+      ),
+      signInFlow: () async => const fc.GoogleTokens(idToken: 'google-id-token'),
+    );
+    addTearDown(service.dispose);
+    service.onSessionEnded = (uid) async => endedFor.add(uid);
+
+    await service.initialize();
+    await service.signIn();
+    await service.signOut();
+    await pumpEventQueue();
+
+    await service.signIn();
+    expect(service.snapshot.state, SpectrumAuthState.signedIn);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('desktop_auth_session_v1'), isNotNull);
+  });
+
   test('overlapping initialize calls leave one live subscription', () async {
     final endedFor = <String>[];
     var now = DateTime.utc(2026, 1, 1, 12);
@@ -340,16 +373,11 @@ void main() {
 
     now = now.add(const Duration(hours: 2));
     expect(await service.idToken(), isNull);
-    await Future<void>.delayed(Duration.zero);
+    await pumpEventQueue();
 
-    // One teardown, not one per initialize() call.
     expect(endedFor, <String>['uid-9']);
   });
 
-  // Teardown clears the cache through a caller-supplied callback, which can take
-  // as long as it likes. A user who signs in again during that window used to
-  // have their brand-new stored session deleted by the teardown that was still
-  // running, so the next launch came up signed out.
   test('signing in during a teardown keeps the new session', () async {
     final releaseCleanup = Completer<void>();
     final service = _service();
@@ -358,13 +386,11 @@ void main() {
     await service.initialize();
     await service.signIn();
 
-    // Start the sign-out but leave its cache cleanup hanging.
     final signOut = service.signOut();
-    await Future<void>.delayed(Duration.zero);
+    await pumpEventQueue();
 
-    // The user signs back in while that cleanup is still in flight.
     final signIn = service.signIn();
-    await Future<void>.delayed(Duration.zero);
+    await pumpEventQueue();
     releaseCleanup.complete();
     await Future.wait(<Future<void>>[signOut, signIn]);
 

@@ -3,18 +3,14 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:spectrumpit/src/services/photo_disk_cache.dart';
 import 'package:spectrumpit/src/services/photo_service.dart';
 
-/// A 1x1 PNG: small enough to inline, real enough for `Image.memory` to decode
-/// in a widget test.
 final Uint8List tinyPng = base64Decode(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH'
   '/q842iQAAAABJRU5ErkJggg==',
 );
 
-/// A service with no ID token, so every photo read degrades to "unavailable"
-/// and nothing reaches the network. The default for tests that are not about
-/// photos.
 PhotoService unavailablePhotoService() => PhotoService(
   idToken: () async => null,
   httpClient: MockClient(
@@ -22,10 +18,6 @@ PhotoService unavailablePhotoService() => PhotoService(
   ),
 );
 
-/// A service backed by an in-memory stand-in for the Worker.
-///
-/// [requests] records every request that reached it, which is how the cache
-/// tests tell a cache hit from a refetch.
 PhotoService fakePhotoService({
   Map<String, Uint8List>? stored,
   List<http.BaseRequest>? requests,
@@ -33,6 +25,7 @@ PhotoService fakePhotoService({
   Future<PickedPhoto?> Function(PhotoSource source)? picker,
   int cacheLimit = 12,
   http.Response Function(http.Request request)? respond,
+  PhotoDiskCache? diskCache,
 }) {
   final bucket = stored ?? <String, Uint8List>{};
   var next = 0;
@@ -40,15 +33,10 @@ PhotoService fakePhotoService({
     idToken: () async => token,
     picker: picker,
     cacheLimit: cacheLimit,
+    diskCache: diskCache,
     httpClient: MockClient((request) async {
       requests?.add(request);
-      // The Worker authenticates every request with the caller's Bearer token;
-      // simulate that gate so an unauthenticated request cannot hit the
-      // storage logic.
-      // A request with no Authorization header is rejected even when the fake
-      // has no token: the Worker gates on the header being present and valid,
-      // so accepting a missing one let an unauthenticated call reach the
-      // storage logic in a test and pass (#184).
+
       if (token == null ||
           request.headers['Authorization'] != 'Bearer $token') {
         return http.Response('{"error":"Unauthorized"}', 401);

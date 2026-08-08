@@ -15,6 +15,7 @@ void main() {
       teamName: 'Radiant Robotics',
       teamNumber: 3847,
       competition: 'Regional Championship',
+      contact: '555-0100',
       checkedOutAt: checkedOutAt,
       estimatedReturn: estimatedReturn,
       checkedInAt: checkedInAt,
@@ -33,6 +34,7 @@ void main() {
       expect(rebuilt.teamName, record.teamName);
       expect(rebuilt.teamNumber, record.teamNumber);
       expect(rebuilt.competition, record.competition);
+      expect(rebuilt.contact, record.contact);
       expect(rebuilt.checkedOutAt, record.checkedOutAt);
       expect(rebuilt.estimatedReturn, record.estimatedReturn);
       expect(rebuilt.checkedInAt, record.checkedInAt);
@@ -40,27 +42,26 @@ void main() {
       expect(rebuilt.updatedAt, record.updatedAt);
     });
 
-    test(
-      'omits itemId, estimatedReturn and checkedInAt from json when null',
-      () {
-        final record = BorrowRecord(
-          id: 'loan-2',
-          toolName: 'Tape measure',
-          teamName: 'Radiant Robotics',
-          teamNumber: 3847,
-          competition: 'Regional Championship',
-          checkedOutAt: checkedOutAt,
-          returned: false,
-          updatedAt: updatedAt,
-        );
+    test('omits itemId, contact, estimatedReturn and checkedInAt from json '
+        'when null', () {
+      final record = BorrowRecord(
+        id: 'loan-2',
+        toolName: 'Tape measure',
+        teamName: 'Radiant Robotics',
+        teamNumber: 3847,
+        competition: 'Regional Championship',
+        checkedOutAt: checkedOutAt,
+        returned: false,
+        updatedAt: updatedAt,
+      );
 
-        final json = record.toJson();
+      final json = record.toJson();
 
-        expect(json.containsKey('itemId'), isFalse);
-        expect(json.containsKey('estimatedReturn'), isFalse);
-        expect(json.containsKey('checkedInAt'), isFalse);
-      },
-    );
+      expect(json.containsKey('itemId'), isFalse);
+      expect(json.containsKey('contact'), isFalse);
+      expect(json.containsKey('estimatedReturn'), isFalse);
+      expect(json.containsKey('checkedInAt'), isFalse);
+    });
 
     test('copyWith changes one field and keeps the rest', () {
       final record = buildRecord();
@@ -71,6 +72,7 @@ void main() {
       expect(copy.teamName, record.teamName);
       expect(copy.teamNumber, record.teamNumber);
       expect(copy.competition, record.competition);
+      expect(copy.contact, record.contact);
       expect(copy.checkedOutAt, record.checkedOutAt);
       expect(copy.estimatedReturn, record.estimatedReturn);
       expect(copy.checkedInAt, record.checkedInAt);
@@ -87,6 +89,7 @@ void main() {
       expect(copy.teamName, record.teamName);
       expect(copy.teamNumber, record.teamNumber);
       expect(copy.competition, record.competition);
+      expect(copy.contact, record.contact);
       expect(copy.checkedOutAt, record.checkedOutAt);
       expect(copy.estimatedReturn, record.estimatedReturn);
       expect(copy.checkedInAt, record.checkedInAt);
@@ -103,6 +106,7 @@ void main() {
       expect(record.teamName, '');
       expect(record.teamNumber, 0);
       expect(record.competition, '');
+      expect(record.contact, isNull);
       expect(
         record.checkedOutAt,
         DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),

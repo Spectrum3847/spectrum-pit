@@ -17,7 +17,7 @@ void main() {
       appImagePathLoader: () => '/tmp/App.AppImage',
     );
     expect(empty.isSupported, isFalse);
-    // The result depends on the host: only a real Linux host reports support.
+
     expect(set.isSupported, Platform.isLinux);
   });
 
@@ -35,7 +35,7 @@ void main() {
     expect(path, endsWith('/applications/spectrumpit.desktop'));
     final entry = File(path).readAsStringSync();
     expect(entry, contains('Exec="/tmp/App.AppImage"'));
-    // No AppDir means no icon to install; fall back to the theme name.
+
     expect(entry, contains('Icon=spectrumpit\n'));
   });
 
@@ -68,7 +68,7 @@ void main() {
     final appDir = Directory.systemTemp.createTempSync('launcher-appdir');
     addTearDown(() => home.deleteSync(recursive: true));
     addTearDown(() => appDir.deleteSync(recursive: true));
-    // release-desktop.yml writes an 8-byte PNG header when no icon ships.
+
     File(
       '${appDir.path}/spectrumpit.png',
     ).writeAsBytesSync(<int>[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
@@ -92,23 +92,16 @@ void main() {
     await expectLater(service.registerInLauncher(), throwsStateError);
   });
 
-  // #202: quoting the Exec path is not enough on its own. A path holding a $ or
-  // a backtick is reinterpreted by the launcher, and a literal % is read as the
-  // start of a field code.
   test('desktopEntry escapes reserved characters in the Exec path', () {
     final entry = DesktopLauncherService.desktopEntry(
       r'/home/a$b/`c`/d"e"/f\g/App.AppImage',
     );
 
-    // Each reserved character takes two backslashes, because the entry's string
-    // escaping is undone before the Exec quoting is. The embedded quotes matter
-    // most: an unescaped `"` would close the Exec value early and the launcher
-    // would read the rest of the path as separate arguments.
     expect(
       entry,
       contains(r'Exec="/home/a\\$b/\\`c\\`/d\\"e\\"/f\\\\g/App.AppImage" %U'),
     );
-    // %U is a field code the launcher must still expand, so it stays bare.
+
     expect(entry, contains(' %U'));
   });
 

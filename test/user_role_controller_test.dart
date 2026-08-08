@@ -7,8 +7,6 @@ import 'support/fake_spectrum_auth_service.dart';
 import 'support/fake_user_role_service.dart';
 
 void main() {
-  // Named tab identifiers from the model, so the expectations stay aligned
-  // with shell routing instead of bare numbers.
   const featureTabs = [
     AppTabs.inventory,
     AppTabs.packing,
@@ -66,8 +64,6 @@ void main() {
       expect({UserRole.pit}.visibleTabIndices, pitTabs);
     });
 
-    // isMember gates the in-app problem-reporting surface (#438): everyone
-    // except viewer-only gets it.
     test('isMember: true for any non-viewer role, false for viewer only', () {
       expect({UserRole.viewer}.isMember, isFalse);
       expect({UserRole.pit}.isMember, isTrue);
@@ -139,8 +135,6 @@ void main() {
       await auth.signIn();
       await Future<void>.delayed(Duration.zero);
 
-      // Viewer is the no-access default; an admin promotes the account
-      // afterwards (#334).
       expect(controller.roles, {UserRole.viewer});
       controller.dispose();
     });

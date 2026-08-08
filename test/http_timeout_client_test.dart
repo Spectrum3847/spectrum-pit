@@ -6,8 +6,6 @@ import 'package:http/testing.dart';
 
 import 'package:spectrumpit/src/services/http_timeout_client.dart';
 
-// Every outbound client is built over this wrapper so a black-holed
-// connection fails instead of hanging its await forever (#524).
 void main() {
   test('a normal response passes through untouched', () async {
     final client = TimeoutHttpClient(

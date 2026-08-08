@@ -43,7 +43,6 @@ void main() {
     expect(controller.themeMode, ThemeMode.dark);
     expect(notified, isTrue);
 
-    // A new controller reads the same mock store, proving it persisted.
     final reopened = ThemeController();
     await reopened.bootstrap();
     expect(reopened.themeMode, ThemeMode.dark);

@@ -15,6 +15,11 @@ void main() {
       expect(PackingStatus.fromString(null), PackingStatus.packing);
     });
 
+    test('fromString parses notStarted explicitly', () {
+      expect(PackingStatus.fromString('notStarted'), PackingStatus.notStarted);
+      expect(PackingStatus.tryParse('notStarted'), PackingStatus.notStarted);
+    });
+
     test('tryParse returns null for unknown values', () {
       expect(PackingStatus.tryParse('garbage'), isNull);
     });

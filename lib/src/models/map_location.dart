@@ -66,7 +66,8 @@ class MapLocation implements PitModel {
 
 enum MapType {
   lab,
-  pit;
+  pit,
+  vehicle;
 
   static final Map<String, MapType> _byName = {
     for (final type in MapType.values) type.name: type,

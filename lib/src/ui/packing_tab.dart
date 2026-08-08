@@ -4,9 +4,13 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
+import '../models/inventory_item.dart';
 import '../models/packing_record.dart';
+import '../services/container_photo_sync_service.dart';
 import '../services/photo_service.dart';
+import '../state/inventory_controller.dart';
 import '../state/packing_controller.dart';
+import '../theme/app_theme.dart';
 import '../theme/pit_palette.dart';
 import 'packing_photo.dart';
 import '../widgets/keyboard_shortcuts.dart';
@@ -15,11 +19,15 @@ class PackingTab extends StatefulWidget {
   const PackingTab({
     required this.controller,
     required this.photoService,
+    required this.inventoryController,
+    required this.containerPhotoSyncService,
     super.key,
   });
 
   final PackingController controller;
   final PhotoService photoService;
+  final InventoryController inventoryController;
+  final ContainerPhotoSyncService containerPhotoSyncService;
 
   @override
   State<PackingTab> createState() => _PackingTabState();
@@ -28,27 +36,55 @@ class PackingTab extends StatefulWidget {
 class _PackingTabState extends State<PackingTab> {
   final Set<String> _busy = <String>{};
 
+  final Set<String> _busyContainerPhotos = <String>{};
+
+  final Set<String> _containerPhotoChecks = <String>{};
+
+  final Map<String, String?> _containerPhotoKeys = <String, String?>{};
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: widget.controller,
+      animation: Listenable.merge([
+        widget.controller,
+        widget.inventoryController,
+      ]),
       builder: (context, _) {
-        final items = widget.controller.items;
+        final rows = _groupedRows(_mergedRows());
+        final entries = _boardEntries(rows);
         return Stack(
           children: [
-            items.isEmpty
+            rows.isEmpty
                 ? _EmptyBoard(onAdd: () => _openEditor())
                 : ListView.builder(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
-                    itemCount: items.length,
-                    itemBuilder: (context, i) => _PackingRow(
-                      record: items[i],
-                      photoService: widget.photoService,
-                      photoBusy: _busy.contains(items[i].id),
-                      onTap: () => _openEditor(record: items[i]),
-                      onAdvance: () => _advance(items[i]),
-                      onPhotoTap: () => _handlePhoto(items[i]),
-                    ),
+                    itemCount: entries.length,
+                    itemBuilder: (context, i) {
+                      final entry = entries[i];
+                      final location = entry.location;
+                      if (location != null) {
+                        if (!_containerPhotoChecks.contains(location)) {
+                          _containerPhotoChecks.add(location);
+                          _loadContainerPhoto(location);
+                        }
+                        return _LocationHeader(
+                          location: location,
+                          hasPhoto: _containerPhotoKeys[location] != null,
+                          busy: _busyContainerPhotos.contains(location),
+                          onPhotoTap: () => _handleContainerPhoto(location),
+                        );
+                      }
+                      final row = entry.row!;
+                      return _PackingRow(
+                        record: row.record,
+                        displayName: _displayName(row),
+                        photoService: widget.photoService,
+                        photoBusy: _busy.contains(row.record.id),
+                        onTap: () => _openEditor(row: row),
+                        onAdvance: () => _advance(row),
+                        onPhotoTap: () => _handlePhoto(row.record),
+                      );
+                    },
                   ),
             Positioned(
               right: 16,
@@ -66,16 +102,24 @@ class _PackingTabState extends State<PackingTab> {
     );
   }
 
-  Future<void> _advance(PackingRecord record) {
-    return widget.controller
-        .upsert(
-          record.copyWith(
-            packingStatus: _nextStatus(record.packingStatus),
+  Future<void> _advance(_PackingRowData row) {
+    final status = _nextStatus(row.record.packingStatus);
+    final record = row.virtual
+        ? PackingRecord(
+            id: const Uuid().v4(),
+            itemId: row.record.itemId,
+            packingStatus: status,
             updatedAt: DateTime.now().toUtc(),
-          ),
-        )
+          )
+        : row.record.copyWith(
+            packingStatus: status,
+            updatedAt: DateTime.now().toUtc(),
+          );
+    return widget.controller
+        .upsert(record)
         .catchError(
-          (Object error) => _showFailure('update "${record.itemId}"', error),
+          (Object error) =>
+              _showFailure('update "${row.record.itemId}"', error),
         );
   }
 
@@ -161,8 +205,156 @@ class _PackingTabState extends State<PackingTab> {
     }
   }
 
+  Future<void> _loadContainerPhoto(String location) async {
+    String? key;
+    try {
+      key = await widget.containerPhotoSyncService.readKey(location);
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() => _containerPhotoKeys[location] = key);
+  }
+
+  Future<void> _handleContainerPhoto(String location) {
+    if (_busyContainerPhotos.contains(location)) return Future<void>.value();
+    final key = _containerPhotoKeys[location];
+    return key == null
+        ? _captureContainerPhoto(location)
+        : _openContainerPhoto(location, key);
+  }
+
+  Future<void> _captureContainerPhoto(String location) async {
+    final source = await choosePhotoSource(
+      context,
+      widget.photoService.sources,
+    );
+    if (source == null || !mounted) return;
+    setState(() => _busyContainerPhotos.add(location));
+    String? key;
+    try {
+      key = await widget.photoService.capture(source);
+    } catch (error) {
+      _showFailure('add a photo to "$location"', error);
+    } finally {
+      if (mounted) setState(() => _busyContainerPhotos.remove(location));
+    }
+    if (key == null) return;
+    if (!mounted) {
+      await _deleteKey(key, location);
+      return;
+    }
+    try {
+      await widget.containerPhotoSyncService.writeKey(location, key);
+    } catch (error) {
+      _showFailure('save the photo for "$location"', error);
+      await _deleteKey(key, location);
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _containerPhotoKeys[location] = key);
+  }
+
+  Future<void> _openContainerPhoto(String location, String key) async {
+    final action = await Navigator.of(context).push<PackingPhotoAction>(
+      MaterialPageRoute<PackingPhotoAction>(
+        builder: (_) => PackingPhotoScreen(
+          photoService: widget.photoService,
+          photoRef: key,
+
+          itemId: location,
+          updatedAt: DateTime.now().toUtc(),
+        ),
+      ),
+    );
+    if (action == null || !mounted) return;
+    switch (action) {
+      case PackingPhotoAction.replace:
+        await _captureContainerPhoto(location);
+      case PackingPhotoAction.remove:
+        await _removeContainerPhoto(location, key);
+    }
+  }
+
+  Future<void> _removeContainerPhoto(String location, String key) async {
+    try {
+      await widget.containerPhotoSyncService.clearKey(location);
+    } catch (error) {
+      _showFailure('remove the photo from "$location"', error);
+      return;
+    }
+    await _deleteKey(key, location);
+    if (!mounted) return;
+    setState(() => _containerPhotoKeys[location] = null);
+  }
+
   PackingRecord _current(PackingRecord record) => widget.controller.items
       .firstWhere((item) => item.id == record.id, orElse: () => record);
+
+  List<_PackingRowData> _mergedRows() {
+    final records = widget.controller.items;
+    final inventoryItems = widget.inventoryController.items;
+    final rows = <_PackingRowData>[];
+    for (final item in inventoryItems) {
+      PackingRecord? match;
+      for (final record in records) {
+        if (record.itemId == item.id) {
+          match = record;
+          break;
+        }
+      }
+      rows.add(
+        match == null
+            ? (record: _virtualRecord(item), item: item, virtual: true)
+            : (record: match, item: item, virtual: false),
+      );
+    }
+    final inventoryIds = {for (final item in inventoryItems) item.id};
+    for (final record in records) {
+      if (inventoryIds.contains(record.itemId)) continue;
+      rows.add((record: record, item: null, virtual: false));
+    }
+    return rows;
+  }
+
+  List<_PackingRowData> _groupedRows(List<_PackingRowData> rows) {
+    final byLocation = <String, List<_PackingRowData>>{};
+    final order = <String>[];
+    final ungrouped = <_PackingRowData>[];
+    for (final row in rows) {
+      final location = row.item?.pitLocation.trim() ?? '';
+      if (location.isEmpty) {
+        ungrouped.add(row);
+        continue;
+      }
+      if (!byLocation.containsKey(location)) order.add(location);
+      byLocation.putIfAbsent(location, () => []).add(row);
+    }
+    return [
+      for (final location in order) ...byLocation[location]!,
+      ...ungrouped,
+    ];
+  }
+
+  List<_BoardEntry> _boardEntries(List<_PackingRowData> rows) {
+    final entries = <_BoardEntry>[];
+    String? current;
+    for (final row in rows) {
+      final location = row.item?.pitLocation.trim() ?? '';
+      if (location.isNotEmpty && location != current) {
+        entries.add((location: location, row: null));
+        current = location;
+      }
+      if (location.isEmpty) current = null;
+      entries.add((location: null, row: row));
+    }
+    return entries;
+  }
+
+  PackingRecord _virtualRecord(InventoryItem item) => PackingRecord(
+    id: item.id,
+    itemId: item.id,
+    packingStatus: PackingStatus.notStarted,
+    updatedAt: item.updatedAt,
+  );
 
   void _showFailure(String action, Object error) {
     if (!mounted) return;
@@ -171,12 +363,16 @@ class _PackingTabState extends State<PackingTab> {
     ).showSnackBar(SnackBar(content: Text('Could not $action: $error')));
   }
 
-  Future<void> _openEditor({PackingRecord? record}) {
+  Future<void> _openEditor({_PackingRowData? row}) {
+    final record = (row == null || row.virtual) ? null : row.record;
+    final item = row?.item;
+    final label = item?.name ?? record?.itemId ?? '';
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       builder: (sheetContext) => _RecordEditorSheet(
         record: record,
+        item: item,
         photoService: widget.photoService,
         onSubmit: (result) async {
           try {
@@ -190,10 +386,7 @@ class _PackingTabState extends State<PackingTab> {
         onDelete: record == null
             ? null
             : () async {
-                final confirmed = await _confirmDelete(
-                  sheetContext,
-                  record.itemId,
-                );
+                final confirmed = await _confirmDelete(sheetContext, label);
                 if (!confirmed) return;
                 var deleted = false;
 
@@ -202,11 +395,11 @@ class _PackingTabState extends State<PackingTab> {
                   await widget.controller.delete(record.id);
                   deleted = true;
                 } catch (error) {
-                  _showFailure('delete "${record.itemId}"', error);
+                  _showFailure('delete "$label"', error);
                 }
 
                 if (deleted && photoRef != null) {
-                  await _deleteKey(photoRef, record.itemId);
+                  await _deleteKey(photoRef, label);
                 }
 
                 if (!deleted) return;
@@ -243,7 +436,20 @@ class _PackingTabState extends State<PackingTab> {
   }
 }
 
+typedef _PackingRowData = ({
+  PackingRecord record,
+  InventoryItem? item,
+  bool virtual,
+});
+
+typedef _BoardEntry = ({String? location, _PackingRowData? row});
+
+String _displayName(_PackingRowData row) =>
+    row.item?.name ??
+    (row.record.itemId.isEmpty ? 'Untitled item' : row.record.itemId);
+
 PackingStatus _nextStatus(PackingStatus status) => switch (status) {
+  PackingStatus.notStarted => PackingStatus.packing,
   PackingStatus.packing => PackingStatus.staging,
   PackingStatus.staging => PackingStatus.loading,
   PackingStatus.loading => PackingStatus.ready,
@@ -251,6 +457,7 @@ PackingStatus _nextStatus(PackingStatus status) => switch (status) {
 };
 
 String _statusLabel(PackingStatus status) => switch (status) {
+  PackingStatus.notStarted => 'Not started',
   PackingStatus.packing => 'Packing',
   PackingStatus.staging => 'Staging',
   PackingStatus.loading => 'Loading',
@@ -258,6 +465,7 @@ String _statusLabel(PackingStatus status) => switch (status) {
 };
 
 IconData _statusIcon(PackingStatus status) => switch (status) {
+  PackingStatus.notStarted => Icons.radio_button_unchecked,
   PackingStatus.packing => Icons.inventory_2_outlined,
   PackingStatus.staging => Icons.move_up_rounded,
   PackingStatus.loading => Icons.local_shipping_outlined,
@@ -266,6 +474,7 @@ IconData _statusIcon(PackingStatus status) => switch (status) {
 
 Color _statusColor(BuildContext context, PackingStatus status) {
   return switch (status) {
+    PackingStatus.notStarted => PitPalette.inkMutedOf(context),
     PackingStatus.packing => PitPalette.statusPackingOf(context),
     PackingStatus.staging => PitPalette.statusStagingOf(context),
     PackingStatus.loading => PitPalette.statusLoadingOf(context),
@@ -276,6 +485,7 @@ Color _statusColor(BuildContext context, PackingStatus status) {
 class _PackingRow extends StatelessWidget {
   const _PackingRow({
     required this.record,
+    required this.displayName,
     required this.photoService,
     required this.photoBusy,
     required this.onTap,
@@ -284,6 +494,8 @@ class _PackingRow extends StatelessWidget {
   });
 
   final PackingRecord record;
+
+  final String displayName;
   final PhotoService photoService;
   final bool photoBusy;
   final VoidCallback onTap;
@@ -311,7 +523,7 @@ class _PackingRow extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    record.itemId.isEmpty ? 'Untitled item' : record.itemId,
+                    displayName,
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                       fontWeight: FontWeight.w600,
                     ),
@@ -383,6 +595,56 @@ class _StatusChip extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _LocationHeader extends StatelessWidget {
+  const _LocationHeader({
+    required this.location,
+    required this.hasPhoto,
+    required this.busy,
+    required this.onPhotoTap,
+  });
+
+  final String location;
+  final bool hasPhoto;
+  final bool busy;
+  final VoidCallback onPhotoTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = PitPalette.inkMutedOf(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              location.toUpperCase(),
+              style: pitCodeStyle(context, color: PitPalette.inkOf(context)),
+            ),
+          ),
+          IconButton(
+            onPressed: busy ? null : onPhotoTap,
+            tooltip: hasPhoto
+                ? 'Open the container photo'
+                : 'Add a container photo',
+            icon: busy
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Icon(
+                    hasPhoto
+                        ? Icons.photo_outlined
+                        : Icons.photo_camera_outlined,
+                    color: hasPhoto ? PitPalette.accentOf(context) : muted,
+                  ),
+          ),
+        ],
       ),
     );
   }
@@ -733,13 +995,16 @@ class _DashedRectPainter extends CustomPainter {
 
 class _RecordEditorSheet extends StatefulWidget {
   const _RecordEditorSheet({
-    required this.record,
     required this.photoService,
     required this.onSubmit,
+    this.record,
+    this.item,
     this.onDelete,
   });
 
   final PackingRecord? record;
+
+  final InventoryItem? item;
   final PhotoService photoService;
 
   final Future<bool> Function(PackingRecord record) onSubmit;
@@ -770,8 +1035,11 @@ class _RecordEditorSheetState extends State<_RecordEditorSheet> {
   void initState() {
     super.initState();
     final record = widget.record;
-    _itemId = TextEditingController(text: record?.itemId ?? '');
-    _status = record?.packingStatus ?? PackingStatus.packing;
+    final item = widget.item;
+    _itemId = TextEditingController(text: item?.name ?? record?.itemId ?? '');
+    _status =
+        record?.packingStatus ??
+        (item != null ? PackingStatus.notStarted : PackingStatus.packing);
     _photoRef = record?.photoRef;
     _originalPhotoRef = record?.photoRef;
   }
@@ -825,7 +1093,8 @@ class _RecordEditorSheetState extends State<_RecordEditorSheet> {
   }
 
   Future<void> _save() async {
-    final itemId = _itemId.text.trim();
+    final item = widget.item;
+    final itemId = item?.id ?? _itemId.text.trim();
     if (itemId.isEmpty) return;
     if (_saving) return;
     setState(() => _saving = true);
@@ -868,6 +1137,8 @@ class _RecordEditorSheetState extends State<_RecordEditorSheet> {
   Widget build(BuildContext context) {
     final editing = widget.record != null;
 
+    final canSave = widget.item != null || _itemId.text.trim().isNotEmpty;
+
     return SaveShortcut(
       onSave: _save,
       child: Padding(
@@ -899,16 +1170,23 @@ class _RecordEditorSheetState extends State<_RecordEditorSheet> {
                 ],
               ),
               const SizedBox(height: 12),
-              TextField(
-                controller: _itemId,
-                autofocus: !editing,
-                textCapitalization: TextCapitalization.sentences,
-                onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(
-                  labelText: 'Item name',
-                  hintText: 'DeWalt Drill Kit',
+              if (widget.item != null)
+                TextField(
+                  controller: _itemId,
+                  readOnly: true,
+                  decoration: const InputDecoration(labelText: 'Item name'),
+                )
+              else
+                TextField(
+                  controller: _itemId,
+                  autofocus: !editing,
+                  textCapitalization: TextCapitalization.sentences,
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(
+                    labelText: 'Item name',
+                    hintText: 'DeWalt Drill Kit',
+                  ),
                 ),
-              ),
               const SizedBox(height: 16),
               _PhotoSection(
                 photoRef: _photoRef,
@@ -943,7 +1221,7 @@ class _RecordEditorSheetState extends State<_RecordEditorSheet> {
               ),
               const SizedBox(height: 20),
               FilledButton(
-                onPressed: _itemId.text.trim().isEmpty ? null : _save,
+                onPressed: canSave ? _save : null,
                 child: Text(editing ? 'Save' : 'Add item'),
               ),
             ],

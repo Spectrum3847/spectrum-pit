@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:firestore_client/firestore_client.dart' as fc;
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -82,11 +83,15 @@ class DesktopAuthService implements SpectrumAuthService {
   Future<void> _ensureAuthStateListener() {
     final previous = _listenerSetup;
     final next = () async {
-      await previous;
-      await _authStateSub?.cancel();
-      _authStateSub = _session.authStateChanges.listen((user) {
-        if (user == null) unawaited(_handleSessionRevoked());
-      });
+      try {
+        await previous;
+        await _authStateSub?.cancel();
+        _authStateSub = _session.authStateChanges.listen((user) {
+          if (user == null) unawaited(_handleSessionRevoked());
+        });
+      } catch (error) {
+        debugPrint('Desktop auth listener setup failed: $error');
+      }
     }();
     _listenerSetup = next;
     return next;
@@ -127,12 +132,11 @@ class DesktopAuthService implements SpectrumAuthService {
         );
       } else {
         await prefs.remove(_prefsKey);
-        final revokedUid = payload['uid'];
-        if (revokedUid is String && revokedUid.isNotEmpty) {
-          await _endSession(revokedUid);
-        }
+        await _endSession(uid);
       }
-    } catch (_) {}
+    } catch (error) {
+      debugPrint('Desktop session restore failed: $error');
+    }
   }
 
   @override
@@ -165,7 +169,11 @@ class DesktopAuthService implements SpectrumAuthService {
   Future<void> signOut() async {
     _endingSession = true;
     final departingUid = currentUser?.uid;
-    await _session.signOut();
+    try {
+      await _session.signOut();
+    } catch (error) {
+      debugPrint('Desktop sign-out could not reach the server: $error');
+    }
     await _runTeardown(departingUid);
     _emit(const SpectrumAuthSnapshot(state: SpectrumAuthState.signedOut));
   }
@@ -180,12 +188,17 @@ class DesktopAuthService implements SpectrumAuthService {
 
   Future<void> _runTeardown(String? uid) {
     _endingSession = true;
-    final done = () async {
+    final previous = _teardown;
+    late final Future<void> done;
+    done = () async {
       try {
+        try {
+          await previous;
+        } catch (_) {}
         await _forgetStoredSession();
         if (uid != null) await _endSession(uid);
       } finally {
-        _endingSession = false;
+        if (identical(_teardown, done)) _endingSession = false;
       }
     }();
     _teardown = done;

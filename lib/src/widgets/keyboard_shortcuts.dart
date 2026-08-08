@@ -23,29 +23,3 @@ class SaveShortcut extends StatelessWidget {
     );
   }
 }
-
-class HorizontalStepShortcuts extends StatelessWidget {
-  const HorizontalStepShortcuts({
-    required this.onPrevious,
-    required this.onNext,
-    required this.child,
-    super.key,
-  });
-
-  final VoidCallback onPrevious;
-  final VoidCallback onNext;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return FocusTraversalGroup(
-      child: CallbackShortcuts(
-        bindings: <ShortcutActivator, VoidCallback>{
-          const SingleActivator(LogicalKeyboardKey.arrowLeft): onPrevious,
-          const SingleActivator(LogicalKeyboardKey.arrowRight): onNext,
-        },
-        child: child,
-      ),
-    );
-  }
-}

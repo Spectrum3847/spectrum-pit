@@ -116,8 +116,6 @@ void main() {
   });
 
   test('streamAllProfiles errors when the first poll fails', () async {
-    // A denied first read (non-admin) must surface as a stream error, not an
-    // endless spinner (#526).
     final service = DesktopUserRoleService(
       pollInterval: const Duration(milliseconds: 5),
       firestore: _firestore(
@@ -130,8 +128,6 @@ void main() {
   test(
     'a failed poll after a successful emit keeps the stream alive',
     () async {
-      // One transient error between good polls must not end the stream: an
-      // async* generator never resumes after an uncaught throw (#526).
       var calls = 0;
       final service = DesktopUserRoleService(
         pollInterval: const Duration(milliseconds: 5),

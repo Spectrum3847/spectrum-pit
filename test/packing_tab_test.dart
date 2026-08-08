@@ -4,12 +4,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:spectrumpit/src/models/inventory_item.dart';
 import 'package:spectrumpit/src/models/packing_record.dart';
+import 'package:spectrumpit/src/services/container_photo_sync_service.dart';
 import 'package:spectrumpit/src/services/photo_service.dart';
 import 'package:spectrumpit/src/services/spectrum_auth_service.dart';
+import 'package:spectrumpit/src/state/inventory_controller.dart';
 import 'package:spectrumpit/src/state/packing_controller.dart';
 import 'package:spectrumpit/src/ui/packing_tab.dart';
 
+import 'support/fake_container_photo_sync_service.dart';
+import 'support/fake_inventory_sync_service.dart';
 import 'support/fake_packing_sync_service.dart';
 import 'support/fake_spectrum_auth_service.dart';
 import 'support/photo_test_support.dart';
@@ -38,26 +43,56 @@ Future<PackingController> _makeController({
     authService: FakeSpectrumAuthService(initialUser: _user),
     syncService: sync,
   );
-  // Cleanup runs even when an expectation fails later.
+
   addTearDown(controller.dispose);
   await controller.bootstrap();
   if (initial.isNotEmpty) sync.emit(initial);
   return controller;
 }
 
-Widget _wrap(PackingController controller, {PhotoService? photoService}) =>
-    MaterialApp(
-      // No ink splash: the test engine's shader format does not match it.
-      theme: ThemeData(splashFactory: NoSplash.splashFactory),
-      home: Scaffold(
-        body: PackingTab(
-          controller: controller,
-          photoService: photoService ?? unavailablePhotoService(),
-        ),
-      ),
+InventoryItem _inventoryItem(String id, {String name = 'Impact Driver'}) =>
+    InventoryItem(
+      id: id,
+      name: name,
+      labLocation: 'CAB-A2',
+      pitLocation: 'RC1-DB',
+      status: InventoryStatus.inLab,
+      updatedAt: DateTime.utc(2026, 1, 1),
     );
 
+Future<InventoryController> _makeInventory({
+  List<InventoryItem> initial = const [],
+}) async {
+  inventorySync = FakeInventorySyncService();
+  final controller = InventoryController(
+    authService: FakeSpectrumAuthService(initialUser: _user),
+    syncService: inventorySync,
+  );
+  addTearDown(controller.dispose);
+  await controller.bootstrap();
+  if (initial.isNotEmpty) inventorySync.emit(initial);
+  return controller;
+}
+
+Widget _wrap(
+  PackingController controller,
+  InventoryController inventoryController, {
+  PhotoService? photoService,
+  required ContainerPhotoSyncService containerPhotoSyncService,
+}) => MaterialApp(
+  theme: ThemeData(splashFactory: NoSplash.splashFactory),
+  home: Scaffold(
+    body: PackingTab(
+      controller: controller,
+      inventoryController: inventoryController,
+      photoService: photoService ?? unavailablePhotoService(),
+      containerPhotoSyncService: containerPhotoSyncService,
+    ),
+  ),
+);
+
 late FakePackingSyncService sync;
+late FakeInventorySyncService inventorySync;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -66,7 +101,14 @@ void main() {
     tester,
   ) async {
     final controller = await _makeController();
-    await tester.pumpWidget(_wrap(controller));
+    final inventory = await _makeInventory();
+    await tester.pumpWidget(
+      _wrap(
+        controller,
+        inventory,
+        containerPhotoSyncService: FakeContainerPhotoSyncService(),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('The packing list is empty'), findsOneWidget);
@@ -80,7 +122,14 @@ void main() {
         _record('b', itemId: 'Soldering Iron'),
       ],
     );
-    await tester.pumpWidget(_wrap(controller));
+    final inventory = await _makeInventory();
+    await tester.pumpWidget(
+      _wrap(
+        controller,
+        inventory,
+        containerPhotoSyncService: FakeContainerPhotoSyncService(),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Drill Kit'), findsOneWidget);
@@ -91,7 +140,14 @@ void main() {
     final controller = await _makeController(
       initial: [_record('a', status: PackingStatus.staging)],
     );
-    await tester.pumpWidget(_wrap(controller));
+    final inventory = await _makeInventory();
+    await tester.pumpWidget(
+      _wrap(
+        controller,
+        inventory,
+        containerPhotoSyncService: FakeContainerPhotoSyncService(),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Staging'), findsOneWidget);
@@ -101,7 +157,14 @@ void main() {
     final controller = await _makeController(
       initial: [_record('a', status: PackingStatus.packing)],
     );
-    await tester.pumpWidget(_wrap(controller));
+    final inventory = await _makeInventory();
+    await tester.pumpWidget(
+      _wrap(
+        controller,
+        inventory,
+        containerPhotoSyncService: FakeContainerPhotoSyncService(),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Packing'), findsOneWidget);
@@ -115,7 +178,14 @@ void main() {
 
   testWidgets('FAB opens the add editor', (tester) async {
     final controller = await _makeController();
-    await tester.pumpWidget(_wrap(controller));
+    final inventory = await _makeInventory();
+    await tester.pumpWidget(
+      _wrap(
+        controller,
+        inventory,
+        containerPhotoSyncService: FakeContainerPhotoSyncService(),
+      ),
+    );
     await tester.pumpAndSettle();
 
     await tester.tap(find.byType(FloatingActionButton));
@@ -127,7 +197,14 @@ void main() {
 
   testWidgets('add editor creates a new record', (tester) async {
     final controller = await _makeController();
-    await tester.pumpWidget(_wrap(controller));
+    final inventory = await _makeInventory();
+    await tester.pumpWidget(
+      _wrap(
+        controller,
+        inventory,
+        containerPhotoSyncService: FakeContainerPhotoSyncService(),
+      ),
+    );
     await tester.pumpAndSettle();
 
     await tester.tap(find.byType(FloatingActionButton));
@@ -145,7 +222,14 @@ void main() {
 
   testWidgets('add button is disabled when name is empty', (tester) async {
     final controller = await _makeController();
-    await tester.pumpWidget(_wrap(controller));
+    final inventory = await _makeInventory();
+    await tester.pumpWidget(
+      _wrap(
+        controller,
+        inventory,
+        containerPhotoSyncService: FakeContainerPhotoSyncService(),
+      ),
+    );
     await tester.pumpAndSettle();
 
     await tester.tap(find.byType(FloatingActionButton));
@@ -154,7 +238,7 @@ void main() {
     final button = tester.widget<FilledButton>(
       find.widgetWithText(FilledButton, 'Add item').last,
     );
-    // The save button should be disabled when the text field is empty.
+
     expect(button.onPressed, isNull);
   });
 
@@ -162,7 +246,14 @@ void main() {
     final controller = await _makeController(
       initial: [_record('a', itemId: 'Drill')],
     );
-    await tester.pumpWidget(_wrap(controller));
+    final inventory = await _makeInventory();
+    await tester.pumpWidget(
+      _wrap(
+        controller,
+        inventory,
+        containerPhotoSyncService: FakeContainerPhotoSyncService(),
+      ),
+    );
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Drill'));
@@ -176,7 +267,14 @@ void main() {
     tester,
   ) async {
     final controller = await _makeController(initial: [_record('a')]);
-    await tester.pumpWidget(_wrap(controller));
+    final inventory = await _makeInventory();
+    await tester.pumpWidget(
+      _wrap(
+        controller,
+        inventory,
+        containerPhotoSyncService: FakeContainerPhotoSyncService(),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.byIcon(Icons.add_a_photo_outlined), findsOneWidget);
@@ -187,10 +285,13 @@ void main() {
     final controller = await _makeController(
       initial: [_record('a', photoRef: 'a.jpg')],
     );
+    final inventory = await _makeInventory();
     await tester.pumpWidget(
       _wrap(
         controller,
+        inventory,
         photoService: fakePhotoService(stored: {'a.jpg': tinyPng}),
+        containerPhotoSyncService: FakeContainerPhotoSyncService(),
       ),
     );
     await tester.pumpAndSettle();
@@ -204,12 +305,15 @@ void main() {
     final controller = await _makeController(
       initial: [_record('a', photoRef: 'a.jpg')],
     );
+    final inventory = await _makeInventory();
     await tester.pumpWidget(
       _wrap(
         controller,
+        inventory,
         photoService: fakePhotoService(
           respond: (_) => http.Response('boom', 500),
         ),
+        containerPhotoSyncService: FakeContainerPhotoSyncService(),
       ),
     );
     await tester.pumpAndSettle();
@@ -227,7 +331,14 @@ void main() {
     final controller = await _makeController(
       initial: [_record('a', photoRef: 'a.jpg')],
     );
-    await tester.pumpWidget(_wrap(controller));
+    final inventory = await _makeInventory();
+    await tester.pumpWidget(
+      _wrap(
+        controller,
+        inventory,
+        containerPhotoSyncService: FakeContainerPhotoSyncService(),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.byIcon(Icons.cloud_off_rounded), findsOneWidget);
@@ -236,19 +347,19 @@ void main() {
   testWidgets('tapping the empty slot captures and attaches the photo', (
     tester,
   ) async {
-    // Desktop offers one capture source, so the tap goes straight to the
-    // picker with no source sheet in between. The override is reset in the
-    // finally block so a failing expectation still clears it.
     debugDefaultTargetPlatformOverride = TargetPlatform.linux;
     try {
       final controller = await _makeController(initial: [_record('a')]);
+      final inventory = await _makeInventory();
       await tester.pumpWidget(
         _wrap(
           controller,
+          inventory,
           photoService: fakePhotoService(
             picker: (_) async =>
                 PickedPhoto(bytes: tinyPng, contentType: 'image/png'),
           ),
+          containerPhotoSyncService: FakeContainerPhotoSyncService(),
         ),
       );
       await tester.pumpAndSettle();
@@ -271,8 +382,14 @@ void main() {
     final controller = await _makeController(
       initial: [_record('a', photoRef: 'a.jpg')],
     );
+    final inventory = await _makeInventory();
     await tester.pumpWidget(
-      _wrap(controller, photoService: fakePhotoService(stored: stored)),
+      _wrap(
+        controller,
+        inventory,
+        photoService: fakePhotoService(stored: stored),
+        containerPhotoSyncService: FakeContainerPhotoSyncService(),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -293,7 +410,14 @@ void main() {
     final controller = await _makeController(
       initial: [_record('a', itemId: 'Drill')],
     );
-    await tester.pumpWidget(_wrap(controller));
+    final inventory = await _makeInventory();
+    await tester.pumpWidget(
+      _wrap(
+        controller,
+        inventory,
+        containerPhotoSyncService: FakeContainerPhotoSyncService(),
+      ),
+    );
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Drill'));
@@ -302,7 +426,6 @@ void main() {
     await tester.tap(find.byIcon(Icons.delete_outline_rounded));
     await tester.pumpAndSettle();
 
-    // Confirm dialog
     await tester.tap(find.text('Delete'));
     await tester.pumpAndSettle();
 
@@ -315,13 +438,16 @@ void main() {
     debugDefaultTargetPlatformOverride = TargetPlatform.linux;
     try {
       final controller = await _makeController();
+      final inventory = await _makeInventory();
       await tester.pumpWidget(
         _wrap(
           controller,
+          inventory,
           photoService: fakePhotoService(
             picker: (_) async =>
                 PickedPhoto(bytes: tinyPng, contentType: 'image/png'),
           ),
+          containerPhotoSyncService: FakeContainerPhotoSyncService(),
         ),
       );
       await tester.pumpAndSettle();
@@ -329,12 +455,10 @@ void main() {
       await tester.tap(find.byType(FloatingActionButton));
       await tester.pumpAndSettle();
 
-      // The editor sheet's empty photo affordance offers capture.
       expect(find.text('Add packing item'), findsOneWidget);
       await tester.tap(find.text('Add photo'));
       await tester.pumpAndSettle();
 
-      // Name the item and save; the returned photoRef rides along.
       await tester.enterText(find.byType(TextField), 'Wrench Set');
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(FilledButton, 'Add item').last);
@@ -347,5 +471,147 @@ void main() {
     } finally {
       debugDefaultTargetPlatformOverride = null;
     }
+  });
+
+  testWidgets('an inventory item with no record shows as a not-started row', (
+    tester,
+  ) async {
+    final controller = await _makeController();
+    final inventory = await _makeInventory(initial: [_inventoryItem('inv-1')]);
+    await tester.pumpWidget(
+      _wrap(
+        controller,
+        inventory,
+        containerPhotoSyncService: FakeContainerPhotoSyncService(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Impact Driver'), findsOneWidget);
+    expect(find.text('Not started'), findsOneWidget);
+
+    expect(controller.items, isEmpty);
+  });
+
+  testWidgets('a legacy record with no matching inventory item still renders', (
+    tester,
+  ) async {
+    final controller = await _makeController(
+      initial: [_record('legacy-1', itemId: 'Old free-text tool')],
+    );
+    final inventory = await _makeInventory();
+    await tester.pumpWidget(
+      _wrap(
+        controller,
+        inventory,
+        containerPhotoSyncService: FakeContainerPhotoSyncService(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Old free-text tool'), findsOneWidget);
+  });
+
+  testWidgets('tapping a not-started row creates a real record', (
+    tester,
+  ) async {
+    final controller = await _makeController();
+    final inventory = await _makeInventory(initial: [_inventoryItem('inv-1')]);
+    await tester.pumpWidget(
+      _wrap(
+        controller,
+        inventory,
+        containerPhotoSyncService: FakeContainerPhotoSyncService(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Not started'));
+    await tester.pumpAndSettle();
+
+    expect(controller.items.length, 1);
+    expect(controller.items.single.itemId, 'inv-1');
+    expect(controller.items.single.id, isNot('inv-1'));
+    expect(controller.items.single.packingStatus, PackingStatus.packing);
+    expect(sync.upserts, isNotEmpty);
+    expect(find.text('Impact Driver'), findsOneWidget);
+    expect(find.text('Packing'), findsOneWidget);
+  });
+
+  testWidgets('items sharing a pitLocation render one location header', (
+    tester,
+  ) async {
+    final controller = await _makeController();
+    final inventory = await _makeInventory(
+      initial: [
+        _inventoryItem('inv-1', name: 'Impact Driver'),
+        _inventoryItem('inv-2', name: 'Angle Grinder'),
+      ],
+    );
+    await tester.pumpWidget(
+      _wrap(
+        controller,
+        inventory,
+        containerPhotoSyncService: FakeContainerPhotoSyncService(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('RC1-DB'), findsOneWidget);
+    expect(find.text('Impact Driver'), findsOneWidget);
+    expect(find.text('Angle Grinder'), findsOneWidget);
+  });
+
+  testWidgets('the header photo affordance flips when readKey finds a photo', (
+    tester,
+  ) async {
+    final controller = await _makeController();
+    final inventory = await _makeInventory(initial: [_inventoryItem('inv-1')]);
+    await tester.pumpWidget(
+      _wrap(
+        controller,
+        inventory,
+        containerPhotoSyncService: FakeContainerPhotoSyncService(
+          seed: const {'RC1-DB': 'containers/rc1-db.jpg'},
+        ),
+      ),
+    );
+
+    expect(find.byIcon(Icons.photo_camera_outlined), findsOneWidget);
+    expect(find.byTooltip('Add a container photo'), findsOneWidget);
+
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.photo_outlined), findsOneWidget);
+    expect(find.byTooltip('Open the container photo'), findsOneWidget);
+  });
+
+  testWidgets('an item with an empty pitLocation gets no location header', (
+    tester,
+  ) async {
+    final controller = await _makeController();
+    final inventory = await _makeInventory(
+      initial: [
+        InventoryItem(
+          id: 'inv-1',
+          name: 'Loose Wrench',
+          labLocation: '',
+          pitLocation: '',
+          status: InventoryStatus.inLab,
+          updatedAt: DateTime.utc(2026, 1, 1),
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      _wrap(
+        controller,
+        inventory,
+        containerPhotoSyncService: FakeContainerPhotoSyncService(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Loose Wrench'), findsOneWidget);
+    expect(find.byTooltip('Add a container photo'), findsNothing);
   });
 }

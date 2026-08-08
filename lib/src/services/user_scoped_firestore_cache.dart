@@ -32,4 +32,10 @@ class UserScopedFirestoreCache implements fc.FirestoreCache {
   Future<void> clear() async => _cacheFor(currentUid())?.clear();
 
   Future<void> clearForUid(String uid) async => _cacheFor(uid)?.clear();
+
+  static Future<void> clearRootForUid(Directory root, String uid) =>
+      UserScopedFirestoreCache(
+        root: root,
+        currentUid: () => null,
+      ).clearForUid(uid);
 }

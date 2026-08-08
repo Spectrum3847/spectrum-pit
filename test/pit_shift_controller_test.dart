@@ -246,8 +246,6 @@ void main() {
     sync.emit([_shift('x')]);
     await Future<void>.delayed(Duration.zero);
 
-    // Capture debugPrint so the test proves onError actually ran, rather than
-    // passing just because an unhandled stream error goes unnoticed here.
     final logged = <String>[];
     final original = debugPrint;
     debugPrint = (String? message, {int? wrapWidth}) =>
@@ -271,7 +269,6 @@ void main() {
       syncService: FakePitShiftSyncService(),
     );
 
-    // Do not await: dispose lands while bootstrap is still reading the cache.
     final booting = controller.bootstrap();
     controller.dispose();
 

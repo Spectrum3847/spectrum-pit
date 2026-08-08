@@ -4,9 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:spectrumpit/src/widgets/keyboard_shortcuts.dart';
 
-/// #197: the desktop build had no keyboard path at all, which all four platform
-/// guidelines require. These cover the shortcut widgets plus the Escape
-/// behaviour that comes free, so the assumption is on record.
 Future<void> _pump(WidgetTester tester, Widget child) async {
   await tester.pumpWidget(MaterialApp(home: Scaffold(body: child)));
   await tester.pumpAndSettle();
@@ -55,29 +52,6 @@ void main() {
 
     expect(find.byType(CallbackShortcuts), findsNothing);
     expect(find.text('form'), findsOneWidget);
-  });
-
-  testWidgets('left and right arrows step through a row', (tester) async {
-    final List<String> steps = <String>[];
-    await _pump(
-      tester,
-      HorizontalStepShortcuts(
-        onPrevious: () => steps.add('previous'),
-        onNext: () => steps.add('next'),
-        child: TextButton(
-          autofocus: true,
-          onPressed: () {},
-          child: const Text('Lab'),
-        ),
-      ),
-    );
-
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-    await tester.pump();
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
-    await tester.pump();
-
-    expect(steps, <String>['next', 'previous']);
   });
 
   testWidgets('Escape closes a modal bottom sheet', (tester) async {
