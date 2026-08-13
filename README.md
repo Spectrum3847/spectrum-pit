@@ -14,7 +14,7 @@ Builds are attached to [this repo's releases](https://github.com/Spectrum3847/sp
 
 ### Check the download first
 
-Every artifact ships with a `.sha256` file next to it. Because these builds are unsigned, the instructions below ask you to click past your platform's own integrity check, so this is the only thing left that tells a good download from a corrupted or tampered one. Download both files into the same folder and run:
+Every artifact ships with a `.sha256` file next to it. Because these builds are unsigned, the instructions below ask you to click past your platform's own integrity check. A colocated `.sha256` only detects a corrupted download: it comes from the same release, so an attacker who replaces both the artifact and its checksum supplies a matching sum. Detecting tampering needs the expected checksum from a separate trusted channel, or a signed artifact. Download both files into the same folder and run:
 
 ```bash
 sha256sum -c App-Name.zip.sha256      # Linux, and Git Bash on Windows

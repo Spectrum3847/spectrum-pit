@@ -38,6 +38,12 @@ class _SlowWriteDiskCache extends PhotoDiskCache {
     files.remove(key);
     completed.add('remove:$key');
   }
+
+  @override
+  Future<void> clear() async {
+    files.clear();
+    completed.add('clear');
+  }
 }
 
 void _diskRaceTests() {
@@ -78,6 +84,32 @@ void _diskRaceTests() {
     disk.gate!.complete();
     await deletion;
     expect(deleteDone, isTrue);
+  });
+
+  test('clearCache waits for a queued write before wiping', () async {
+    final disk = _SlowWriteDiskCache();
+    final service = fakePhotoService(diskCache: disk);
+
+    disk.gate = Completer<void>();
+    final key = await service.upload(_photo());
+
+    expect(disk.files, isEmpty);
+
+    final cleared = service.clearCache();
+    var clearDone = false;
+    cleared.then((_) => clearDone = true);
+    await pumpEventQueue();
+    expect(
+      clearDone,
+      isFalse,
+      reason: 'clear returned while a write for the same key was pending',
+    );
+
+    disk.gate!.complete();
+    await cleared;
+
+    expect(disk.completed, <String>['write:$key', 'clear']);
+    expect(disk.files, isEmpty, reason: 'the queued write survived the clear');
   });
 
   test('operations on different keys do not block each other', () async {

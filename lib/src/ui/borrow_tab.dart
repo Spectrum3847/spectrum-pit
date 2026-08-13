@@ -771,6 +771,8 @@ class _BorrowEditorSheetState extends State<_BorrowEditorSheet> {
               const SizedBox(height: 12),
               TextField(
                 controller: _contact,
+                maxLength: 256,
+                keyboardType: TextInputType.text,
                 decoration: const InputDecoration(
                   labelText: 'Contact (optional)',
                   hintText: 'Phone or email',

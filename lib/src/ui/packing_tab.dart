@@ -36,9 +36,13 @@ class PackingTab extends StatefulWidget {
 class _PackingTabState extends State<PackingTab> {
   final Set<String> _busy = <String>{};
 
+  final Set<String> _advancing = <String>{};
+
   final Set<String> _busyContainerPhotos = <String>{};
 
   final Set<String> _containerPhotoChecks = <String>{};
+
+  final Set<String> _containerPhotoLoadFailed = <String>{};
 
   final Map<String, String?> _containerPhotoKeys = <String, String?>{};
 
@@ -63,7 +67,8 @@ class _PackingTabState extends State<PackingTab> {
                       final entry = entries[i];
                       final location = entry.location;
                       if (location != null) {
-                        if (!_containerPhotoChecks.contains(location)) {
+                        if (!_containerPhotoChecks.contains(location) &&
+                            !_containerPhotoLoadFailed.contains(location)) {
                           _containerPhotoChecks.add(location);
                           _loadContainerPhoto(location);
                         }
@@ -71,6 +76,9 @@ class _PackingTabState extends State<PackingTab> {
                           location: location,
                           hasPhoto: _containerPhotoKeys[location] != null,
                           busy: _busyContainerPhotos.contains(location),
+                          loadFailed: _containerPhotoLoadFailed.contains(
+                            location,
+                          ),
                           onPhotoTap: () => _handleContainerPhoto(location),
                         );
                       }
@@ -103,10 +111,13 @@ class _PackingTabState extends State<PackingTab> {
   }
 
   Future<void> _advance(_PackingRowData row) {
+    final id = row.record.id;
+    if (_advancing.contains(id)) return Future<void>.value();
+    _advancing.add(id);
     final status = _nextStatus(row.record.packingStatus);
     final record = row.virtual
         ? PackingRecord(
-            id: const Uuid().v4(),
+            id: id,
             itemId: row.record.itemId,
             packingStatus: status,
             updatedAt: DateTime.now().toUtc(),
@@ -120,7 +131,8 @@ class _PackingTabState extends State<PackingTab> {
         .catchError(
           (Object error) =>
               _showFailure('update "${row.record.itemId}"', error),
-        );
+        )
+        .whenComplete(() => _advancing.remove(id));
   }
 
   Future<void> _handlePhoto(PackingRecord record) {
@@ -207,15 +219,30 @@ class _PackingTabState extends State<PackingTab> {
 
   Future<void> _loadContainerPhoto(String location) async {
     String? key;
+    var failed = false;
     try {
       key = await widget.containerPhotoSyncService.readKey(location);
-    } catch (_) {}
+    } catch (_) {
+      failed = true;
+    }
     if (!mounted) return;
-    setState(() => _containerPhotoKeys[location] = key);
+    setState(() {
+      if (failed) {
+        _containerPhotoLoadFailed.add(location);
+        _containerPhotoChecks.remove(location);
+      } else {
+        _containerPhotoLoadFailed.remove(location);
+        _containerPhotoKeys[location] = key;
+      }
+    });
   }
 
   Future<void> _handleContainerPhoto(String location) {
     if (_busyContainerPhotos.contains(location)) return Future<void>.value();
+    if (_containerPhotoLoadFailed.contains(location)) {
+      _containerPhotoChecks.add(location);
+      return _loadContainerPhoto(location);
+    }
     final key = _containerPhotoKeys[location];
     return key == null
         ? _captureContainerPhoto(location)
@@ -229,28 +256,27 @@ class _PackingTabState extends State<PackingTab> {
     );
     if (source == null || !mounted) return;
     setState(() => _busyContainerPhotos.add(location));
+    final previous = _containerPhotoKeys[location];
     String? key;
     try {
       key = await widget.photoService.capture(source);
+      if (key == null) return;
+      if (!mounted) {
+        await _deleteKey(key, location);
+        return;
+      }
+      await widget.containerPhotoSyncService.writeKey(location, key);
+      if (!mounted) return;
+      setState(() => _containerPhotoKeys[location] = key);
+      if (previous != null && previous != key) {
+        await _deleteKey(previous, location);
+      }
     } catch (error) {
       _showFailure('add a photo to "$location"', error);
+      if (key != null) await _deleteKey(key, location);
     } finally {
       if (mounted) setState(() => _busyContainerPhotos.remove(location));
     }
-    if (key == null) return;
-    if (!mounted) {
-      await _deleteKey(key, location);
-      return;
-    }
-    try {
-      await widget.containerPhotoSyncService.writeKey(location, key);
-    } catch (error) {
-      _showFailure('save the photo for "$location"', error);
-      await _deleteKey(key, location);
-      return;
-    }
-    if (!mounted) return;
-    setState(() => _containerPhotoKeys[location] = key);
   }
 
   Future<void> _openContainerPhoto(String location, String key) async {
@@ -605,12 +631,14 @@ class _LocationHeader extends StatelessWidget {
     required this.location,
     required this.hasPhoto,
     required this.busy,
+    required this.loadFailed,
     required this.onPhotoTap,
   });
 
   final String location;
   final bool hasPhoto;
   final bool busy;
+  final bool loadFailed;
   final VoidCallback onPhotoTap;
 
   @override
@@ -628,7 +656,9 @@ class _LocationHeader extends StatelessWidget {
           ),
           IconButton(
             onPressed: busy ? null : onPhotoTap,
-            tooltip: hasPhoto
+            tooltip: loadFailed
+                ? 'Could not check for a container photo -- tap to retry'
+                : hasPhoto
                 ? 'Open the container photo'
                 : 'Add a container photo',
             icon: busy
@@ -638,10 +668,14 @@ class _LocationHeader extends StatelessWidget {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : Icon(
-                    hasPhoto
+                    loadFailed
+                        ? Icons.cloud_off_rounded
+                        : hasPhoto
                         ? Icons.photo_outlined
                         : Icons.photo_camera_outlined,
-                    color: hasPhoto ? PitPalette.accentOf(context) : muted,
+                    color: hasPhoto && !loadFailed
+                        ? PitPalette.accentOf(context)
+                        : muted,
                   ),
           ),
         ],
@@ -1103,7 +1137,7 @@ class _RecordEditorSheetState extends State<_RecordEditorSheet> {
     try {
       committed = await widget.onSubmit(
         PackingRecord(
-          id: existing?.id ?? const Uuid().v4(),
+          id: item?.id ?? existing?.id ?? const Uuid().v4(),
           itemId: itemId,
           packingStatus: _status,
           photoRef: _photoRef,

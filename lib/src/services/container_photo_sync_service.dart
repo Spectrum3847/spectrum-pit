@@ -1,15 +1,23 @@
+import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:crypto/crypto.dart';
 
 const String unlabeledDocId = 'unlabeled';
 
 String containerPhotoDocId(String location) {
-  final slug = location
-      .trim()
-      .toLowerCase()
-      .replaceAll(RegExp('[^a-z0-9]+'), '-')
-      .replaceAll(RegExp('^-+|-+\$'), '');
-  return slug.isEmpty ? unlabeledDocId : slug;
+  final trimmed = location.trim();
+  final slug = _readableSlug(trimmed);
+  return slug.isEmpty ? unlabeledDocId : '$slug-${_hash8(trimmed)}';
 }
+
+String _readableSlug(String location) => location
+    .toLowerCase()
+    .replaceAll(RegExp('[^a-z0-9]+'), '-')
+    .replaceAll(RegExp('^-+|-+\$'), '');
+
+String _hash8(String value) =>
+    sha256.convert(utf8.encode(value)).toString().substring(0, 8);
 
 abstract class ContainerPhotoSyncService {
   Future<String?> readKey(String location);

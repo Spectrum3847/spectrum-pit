@@ -244,4 +244,29 @@ void main() {
     await blocked;
     expect(sync.serverOps, <String>['delete:b', 'upsert:a']);
   });
+
+  test('a second consecutive failed write rolls back to the last confirmed '
+      'value, not the prior failed one', () async {
+    final controller = InventoryController(
+      authService: FakeSpectrumAuthService(initialUser: _signedInUser),
+      syncService: sync,
+    );
+    addTearDown(controller.dispose);
+    await controller.bootstrap();
+
+    await controller.upsert(_item('a', name: 'A'));
+    expect(controller.items.single.name, 'A');
+
+    sync.failSchedule.addAll(['b failed', 'c failed']);
+    final writingB = controller
+        .upsert(_item('a', name: 'B'))
+        .catchError((_) {});
+    final writingC = controller
+        .upsert(_item('a', name: 'C'))
+        .catchError((_) {});
+    await writingB;
+    await writingC;
+
+    expect(controller.items.single.name, 'A');
+  });
 }

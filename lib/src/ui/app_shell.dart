@@ -198,8 +198,13 @@ class _AppShellState extends State<AppShell> {
     return _featureTabIndices.map((i) {
       final m = _kTabMeta[i];
       final showBadge = i == AppTabs.borrowed && overdueCount > 0;
-      Widget withBadge(Icon icon) =>
-          showBadge ? Badge(label: Text('$overdueCount'), child: icon) : icon;
+      Widget withBadge(Icon icon) => showBadge
+          ? Semantics(
+              label:
+                  '$overdueCount overdue ${overdueCount == 1 ? 'loan' : 'loans'}',
+              child: Badge(label: Text('$overdueCount'), child: icon),
+            )
+          : icon;
       return NavigationDestination(
         icon: withBadge(Icon(m.icon)),
         selectedIcon: withBadge(Icon(m.selectedIcon)),

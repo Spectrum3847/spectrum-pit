@@ -13,6 +13,8 @@ class FakeInventorySyncService implements InventorySyncService {
 
   Object? failWith;
 
+  final List<Object?> failSchedule = [];
+
   Completer<void>? holdUpsert;
 
   final List<String> serverOps = [];
@@ -20,6 +22,11 @@ class FakeInventorySyncService implements InventorySyncService {
   Iterable<String> get storedIds => _items.keys;
 
   void _throwIfConfigured() {
+    if (failSchedule.isNotEmpty) {
+      final failure = failSchedule.removeAt(0);
+      if (failure != null) throw failure;
+      return;
+    }
     final failure = failWith;
     if (failure == null) return;
     failWith = null;
