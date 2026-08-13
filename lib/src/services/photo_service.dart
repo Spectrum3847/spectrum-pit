@@ -162,6 +162,7 @@ class PhotoService {
   void close() => _client.close();
 
   Future<void> clearCache() async {
+    await Future.wait(_diskOps.values.map((op) => op.catchError((_) {})));
     _cache.clear();
     await _diskCache?.clear();
   }

@@ -531,12 +531,40 @@ void main() {
 
     expect(controller.items.length, 1);
     expect(controller.items.single.itemId, 'inv-1');
-    expect(controller.items.single.id, isNot('inv-1'));
+    expect(controller.items.single.id, 'inv-1');
     expect(controller.items.single.packingStatus, PackingStatus.packing);
     expect(sync.upserts, isNotEmpty);
     expect(find.text('Impact Driver'), findsOneWidget);
     expect(find.text('Packing'), findsOneWidget);
   });
+
+  testWidgets(
+    'saving a not-started row from the editor uses the item id, not a '
+    'fresh one',
+    (tester) async {
+      final controller = await _makeController();
+      final inventory = await _makeInventory(
+        initial: [_inventoryItem('inv-1')],
+      );
+      await tester.pumpWidget(
+        _wrap(
+          controller,
+          inventory,
+          containerPhotoSyncService: FakeContainerPhotoSyncService(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Impact Driver'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Add item'));
+      await tester.pumpAndSettle();
+
+      expect(controller.items.length, 1);
+      expect(controller.items.single.id, 'inv-1');
+      expect(controller.items.single.itemId, 'inv-1');
+    },
+  );
 
   testWidgets('items sharing a pitLocation render one location header', (
     tester,
@@ -584,6 +612,100 @@ void main() {
 
     expect(find.byIcon(Icons.photo_outlined), findsOneWidget);
     expect(find.byTooltip('Open the container photo'), findsOneWidget);
+  });
+
+  testWidgets(
+    'a failed container photo read shows the offline state and tapping it retries',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+      try {
+        final controller = await _makeController();
+        final inventory = await _makeInventory(
+          initial: [_inventoryItem('inv-1')],
+        );
+        final syncService = FakeContainerPhotoSyncService(
+          readFailure: Exception('offline'),
+        );
+        var pickerOpened = false;
+        final photoService = fakePhotoService(
+          picker: (_) async {
+            pickerOpened = true;
+            return PickedPhoto(bytes: tinyPng, contentType: 'image/png');
+          },
+        );
+        await tester.pumpWidget(
+          _wrap(
+            controller,
+            inventory,
+            photoService: photoService,
+            containerPhotoSyncService: syncService,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byIcon(Icons.cloud_off_rounded), findsOneWidget);
+        expect(find.byIcon(Icons.photo_camera_outlined), findsNothing);
+        expect(
+          find.byTooltip(
+            'Could not check for a container photo -- tap to retry',
+          ),
+          findsOneWidget,
+        );
+        expect(syncService.readCalls.length, 1);
+
+        await tester.tap(find.byIcon(Icons.cloud_off_rounded));
+        await tester.pumpAndSettle();
+
+        expect(syncService.readCalls.length, 2);
+        expect(pickerOpened, isFalse);
+        expect(syncService.writeCalls, isEmpty);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    },
+  );
+
+  testWidgets('replacing an existing container photo deletes the old key', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    try {
+      final controller = await _makeController();
+      final inventory = await _makeInventory(
+        initial: [_inventoryItem('inv-1')],
+      );
+      final stored = {'rc1-db.jpg': tinyPng};
+      final syncService = FakeContainerPhotoSyncService(
+        seed: const {'RC1-DB': 'rc1-db.jpg'},
+      );
+      await tester.pumpWidget(
+        _wrap(
+          controller,
+          inventory,
+          photoService: fakePhotoService(
+            stored: stored,
+            picker: (_) async =>
+                PickedPhoto(bytes: tinyPng, contentType: 'image/png'),
+          ),
+          containerPhotoSyncService: syncService,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Open the container photo'));
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(OutlinedButton, 'Replace'), findsOneWidget);
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Replace'));
+      await tester.pumpAndSettle();
+
+      expect(syncService.writeCalls.single.location, 'RC1-DB');
+      expect(syncService.writeCalls.single.key, isNot('rc1-db.jpg'));
+      expect(stored.containsKey('rc1-db.jpg'), isFalse);
+      expect(stored.containsKey('key-0.jpg'), isTrue);
+      expect(find.byTooltip('Open the container photo'), findsOneWidget);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 
   testWidgets('an item with an empty pitLocation gets no location header', (

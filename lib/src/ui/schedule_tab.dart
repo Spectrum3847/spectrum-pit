@@ -12,6 +12,7 @@ import '../state/user_role_controller.dart';
 import '../theme/app_theme.dart';
 import '../theme/pit_palette.dart';
 import '../widgets/keyboard_shortcuts.dart';
+import 'driver_schedule_screen.dart';
 
 class ScheduleTab extends StatefulWidget {
   const ScheduleTab({
@@ -44,7 +45,10 @@ class _ScheduleTabState extends State<ScheduleTab> {
         return Stack(
           children: [
             competition == null
-                ? _EmptySchedule(onAdd: () => _openEditor())
+                ? _EmptySchedule(
+                    onAdd: () => _openEditor(),
+                    onDriverSchedule: _openDriverSchedule,
+                  )
                 : _buildSchedule(context, competitions, competition),
             Positioned(
               right: 16,
@@ -105,6 +109,7 @@ class _ScheduleTabState extends State<ScheduleTab> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
             children: [
+              _DriverScheduleEntry(onOpen: _openDriverSchedule),
               if (shownConflicts.isNotEmpty)
                 _ConflictPanel(conflicts: shownConflicts),
               if (rows.isEmpty)
@@ -148,6 +153,12 @@ class _ScheduleTabState extends State<ScheduleTab> {
   static bool _involves(PitShiftConflict conflict, String uid) =>
       conflict.first.assignedUids.contains(uid) &&
       conflict.second.assignedUids.contains(uid);
+
+  void _openDriverSchedule() {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(builder: (_) => const DriverScheduleScreen()),
+    );
+  }
 
   Map<String, String> _knownAssignees() {
     final known = <String, String>{};
@@ -544,9 +555,10 @@ class _KindChip extends StatelessWidget {
 }
 
 class _EmptySchedule extends StatelessWidget {
-  const _EmptySchedule({required this.onAdd});
+  const _EmptySchedule({required this.onAdd, required this.onDriverSchedule});
 
   final VoidCallback onAdd;
+  final VoidCallback onDriverSchedule;
 
   @override
   Widget build(BuildContext context) {
@@ -554,10 +566,77 @@ class _EmptySchedule extends StatelessWidget {
       icon: Icons.event_note_outlined,
       title: 'No shifts scheduled',
       body: 'Add the first shift to start building the pit schedule.',
-      action: FilledButton.icon(
-        onPressed: onAdd,
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Add shift'),
+      action: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FilledButton.icon(
+            onPressed: onAdd,
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('Add shift'),
+          ),
+          const SizedBox(height: 8),
+          TextButton.icon(
+            onPressed: onDriverSchedule,
+            icon: const Icon(Icons.sports_score_outlined),
+            label: const Text('Driver schedule'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DriverScheduleEntry extends StatelessWidget {
+  const _DriverScheduleEntry({required this.onOpen});
+
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = PitPalette.inkMutedOf(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: PitPalette.surfaceOf(context),
+        borderRadius: BorderRadius.circular(PitPalette.radiusSm),
+        child: InkWell(
+          onTap: onOpen,
+          borderRadius: BorderRadius.circular(PitPalette.radiusSm),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(PitPalette.radiusSm),
+              border: Border.all(color: PitPalette.outlineOf(context)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.sports_score_outlined, color: muted),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Driver schedule',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Generate a balanced match rotation for drivers, '
+                        'operators, technicians, and human players.',
+                        style: Theme.of(
+                          context,
+                        ).textTheme.bodyMedium?.copyWith(color: muted),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(Icons.chevron_right_rounded, color: muted),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

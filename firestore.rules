@@ -81,7 +81,8 @@ service cloud.firestore {
         && isValidContainerPhoto(request.resource.data);
       allow update: if isAuthed() && isMember()
         && isValidContainerPhoto(request.resource.data)
-        && isMonotonicUpdate(resource.data, request.resource.data);
+        && isMonotonicUpdate(resource.data, request.resource.data)
+        && resource.data.location == request.resource.data.location;
       allow delete: if isAuthed() && isMember();
     }
 

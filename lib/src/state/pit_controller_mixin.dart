@@ -34,6 +34,8 @@ mixin PitControllerMixin<T extends PitModel> on ChangeNotifier {
 
   final Map<String, int> _pitMutations = <String, int>{};
 
+  Map<String, T> _pitConfirmed = <String, T>{};
+
   int _pitBeginMutation(String id) =>
       _pitMutations[id] = (_pitMutations[id] ?? 0) + 1;
 
@@ -74,7 +76,6 @@ mixin PitControllerMixin<T extends PitModel> on ChangeNotifier {
   Future<void> upsert(T item) async {
     final mutation = _pitBeginMutation(item.id);
     final previousIndex = _pitItems.indexWhere((e) => e.id == item.id);
-    final previousItem = previousIndex < 0 ? null : _pitItems[previousIndex];
     _pitItems = [
       for (final existing in _pitItems)
         if (existing.id != item.id) existing,
@@ -83,6 +84,7 @@ mixin PitControllerMixin<T extends PitModel> on ChangeNotifier {
     notifyListeners();
     try {
       await _pitQueueRemote(item.id, () => pitUpsertRemote(item));
+      _pitConfirmed[item.id] = item;
     } catch (_) {
       if (!_pitIsNewestMutation(item.id, mutation)) {
         await _pitSaveCache().catchError((_) {});
@@ -92,8 +94,10 @@ mixin PitControllerMixin<T extends PitModel> on ChangeNotifier {
         for (final existing in _pitItems)
           if (existing.id != item.id) existing,
       ];
-      if (previousItem != null) {
-        restored.insert(previousIndex.clamp(0, restored.length), previousItem);
+
+      final confirmed = _pitConfirmed[item.id];
+      if (confirmed != null) {
+        restored.insert(previousIndex.clamp(0, restored.length), confirmed);
       }
       _pitItems = restored;
       notifyListeners();
@@ -108,7 +112,6 @@ mixin PitControllerMixin<T extends PitModel> on ChangeNotifier {
   Future<void> delete(String id) async {
     final mutation = _pitBeginMutation(id);
     final previousIndex = _pitItems.indexWhere((e) => e.id == id);
-    final previousItem = previousIndex < 0 ? null : _pitItems[previousIndex];
     _pitItems = [
       for (final existing in _pitItems)
         if (existing.id != id) existing,
@@ -116,17 +119,20 @@ mixin PitControllerMixin<T extends PitModel> on ChangeNotifier {
     notifyListeners();
     try {
       await _pitQueueRemote(id, () => pitDeleteRemote(id));
+      _pitConfirmed.remove(id);
     } catch (_) {
       if (!_pitIsNewestMutation(id, mutation)) {
         await _pitSaveCache().catchError((_) {});
         rethrow;
       }
-      if (previousItem != null) {
+
+      final confirmed = _pitConfirmed[id];
+      if (confirmed != null) {
         final restored = [
           for (final existing in _pitItems)
             if (existing.id != id) existing,
         ];
-        restored.insert(previousIndex.clamp(0, restored.length), previousItem);
+        restored.insert(previousIndex.clamp(0, restored.length), confirmed);
         _pitItems = restored;
       }
       notifyListeners();
@@ -168,6 +174,8 @@ mixin PitControllerMixin<T extends PitModel> on ChangeNotifier {
         (items) {
           if (gen != _pitStreamGeneration) return;
           _pitItems = items;
+
+          _pitConfirmed = {for (final item in items) item.id: item};
           _pitSaveCache();
           notifyListeners();
         },

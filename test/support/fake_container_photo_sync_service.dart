@@ -21,10 +21,13 @@ class FakeContainerPhotoSyncService implements ContainerPhotoSyncService {
 
   final List<({String location, String key})> writeCalls = [];
 
+  final List<String> readCalls = [];
+
   final List<String> clearCalls = [];
 
   @override
   Future<String?> readKey(String location) async {
+    readCalls.add(location);
     if (_readFailure != null) throw _readFailure;
     return _readKeyValues[location];
   }
