@@ -156,7 +156,15 @@ class _ScheduleTabState extends State<ScheduleTab> {
 
   void _openDriverSchedule() {
     Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(builder: (_) => const DriverScheduleScreen()),
+      MaterialPageRoute<void>(
+        builder: (_) => DriverScheduleScreen(
+          knownPeople: _knownAssignees(),
+          rosterStream: widget.roleController.streamAllProfiles(),
+
+          shiftController: widget.controller,
+          competition: _selectedCompetition(_competitions()),
+        ),
+      ),
     );
   }
 

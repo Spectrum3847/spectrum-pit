@@ -1,20 +1,37 @@
 import 'pit_model.dart';
 
+const int maxBorrowContactLength = 256;
+
 class BorrowRecord implements PitModel {
-  const BorrowRecord({
+  BorrowRecord({
     required this.id,
     this.itemId,
     required this.toolName,
     required this.teamName,
     required this.teamNumber,
     required this.competition,
-    this.contact,
+    String? contact,
     required this.checkedOutAt,
     this.estimatedReturn,
     this.checkedInAt,
     required this.returned,
     required this.updatedAt,
-  });
+  }) : contact = _clampContact(contact);
+
+  static String? _clampContact(String? contact) {
+    if (contact == null || contact.length <= maxBorrowContactLength) {
+      return contact;
+    }
+    final clamped = StringBuffer();
+    var used = 0;
+    for (final rune in contact.runes) {
+      final width = rune > 0xFFFF ? 2 : 1;
+      if (used + width > maxBorrowContactLength) break;
+      clamped.writeCharCode(rune);
+      used += width;
+    }
+    return clamped.toString();
+  }
 
   @override
   final String id;

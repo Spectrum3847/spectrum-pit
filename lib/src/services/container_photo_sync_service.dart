@@ -11,6 +11,17 @@ String containerPhotoDocId(String location) {
   return slug.isEmpty ? unlabeledDocId : '$slug-${_hash8(trimmed)}';
 }
 
+String legacyContainerPhotoDocId(String location) {
+  final slug = _readableSlug(location.trim());
+  return slug.isEmpty ? unlabeledDocId : slug;
+}
+
+List<String> containerPhotoDocIds(String location) {
+  final current = containerPhotoDocId(location);
+  final legacy = legacyContainerPhotoDocId(location);
+  return current == legacy ? [current] : [current, legacy];
+}
+
 String _readableSlug(String location) => location
     .toLowerCase()
     .replaceAll(RegExp('[^a-z0-9]+'), '-')
@@ -27,47 +38,76 @@ abstract class ContainerPhotoSyncService {
   Future<void> clearKey(String location);
 }
 
-class FirestoreContainerPhotoSyncService implements ContainerPhotoSyncService {
+const String containerPhotosCollection = 'containerPhotos';
+
+Map<String, Object?> containerPhotoDoc(String location, String key) => {
+  'location': location,
+  'photoRef': key,
+  'updatedAt': DateTime.now().toUtc().toIso8601String(),
+};
+
+String? containerPhotoRefOf(Map<String, Object?>? fields) {
+  final key = fields?['photoRef'];
+  return key is String && key.isNotEmpty ? key : null;
+}
+
+abstract class FirestoreDocContainerPhotoSyncService
+    implements ContainerPhotoSyncService {
+  Future<Map<String, Object?>?> readDoc(String docId);
+
+  Future<void> setDoc(String docId, Map<String, Object?> fields);
+
+  Future<void> deleteDoc(String docId);
+
+  @override
+  Future<String?> readKey(String location) async {
+    final ids = containerPhotoDocIds(location);
+    final current = containerPhotoRefOf(await readDoc(ids.first));
+    if (current != null) return current;
+    for (final legacyId in ids.skip(1)) {
+      final key = containerPhotoRefOf(await readDoc(legacyId));
+      if (key == null) continue;
+      await setDoc(ids.first, containerPhotoDoc(location, key));
+      await deleteDoc(legacyId);
+      return key;
+    }
+    return null;
+  }
+
+  @override
+  Future<void> writeKey(String location, String key) =>
+      setDoc(containerPhotoDocId(location), containerPhotoDoc(location, key));
+
+  @override
+  Future<void> clearKey(String location) async {
+    for (final docId in containerPhotoDocIds(location)) {
+      await deleteDoc(docId);
+    }
+  }
+}
+
+class FirestoreContainerPhotoSyncService
+    extends FirestoreDocContainerPhotoSyncService {
   FirestoreContainerPhotoSyncService({FirebaseFirestore? firestore})
     : _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _firestore;
 
-  static const String _collection = 'containerPhotos';
+  DocumentReference<Map<String, dynamic>> _doc(String docId) =>
+      _firestore.collection(containerPhotosCollection).doc(docId);
 
   @override
-  Future<String?> readKey(String location) async {
-    final doc = await _firestore
-        .collection(_collection)
-        .doc(containerPhotoDocId(location))
-        .get();
-    if (!doc.exists) return null;
-    final data = doc.data();
-    if (data == null) return null;
-    final key = data['photoRef'];
-    if (key is! String || key.isEmpty) return null;
-    return key;
+  Future<Map<String, Object?>?> readDoc(String docId) async {
+    final doc = await _doc(docId).get();
+    return doc.exists ? doc.data() : null;
   }
 
   @override
-  Future<void> writeKey(String location, String key) async {
-    await _firestore
-        .collection(_collection)
-        .doc(containerPhotoDocId(location))
-        .set({
-          'location': location,
-          'photoRef': key,
-          'updatedAt': DateTime.now().toUtc().toIso8601String(),
-        });
-  }
+  Future<void> setDoc(String docId, Map<String, Object?> fields) =>
+      _doc(docId).set(fields);
 
   @override
-  Future<void> clearKey(String location) async {
-    await _firestore
-        .collection(_collection)
-        .doc(containerPhotoDocId(location))
-        .delete();
-  }
+  Future<void> deleteDoc(String docId) => _doc(docId).delete();
 }
 
 class LocalContainerPhotoSyncService implements ContainerPhotoSyncService {

@@ -174,5 +174,60 @@ void main() {
         expect(record.isOverdueAt(DateTime.utc(2030, 1, 1)), isFalse);
       });
     });
+
+    group('contact length (#268)', () {
+      BorrowRecord withContact(String? contact) => BorrowRecord(
+        id: 'loan-7',
+        toolName: 'Drill',
+        teamName: 'Radiant Robotics',
+        teamNumber: 3847,
+        competition: 'Regional Championship',
+        contact: contact,
+        checkedOutAt: checkedOutAt,
+        returned: false,
+        updatedAt: updatedAt,
+      );
+
+      test('a contact within the limit is untouched', () {
+        expect(withContact('555-0100').contact, '555-0100');
+        expect(withContact(null).contact, isNull);
+        expect(
+          withContact('a' * maxBorrowContactLength).contact!.length,
+          maxBorrowContactLength,
+        );
+      });
+
+      test('an overlong contact is clamped to what the rules accept', () {
+        final record = withContact('a' * (maxBorrowContactLength + 40));
+
+        expect(record.contact!.length, maxBorrowContactLength);
+        expect(
+          (record.toJson()['contact'] as String).length,
+          maxBorrowContactLength,
+        );
+      });
+
+      test('an overlong contact read back from Firestore is clamped too', () {
+        final record = BorrowRecord.fromJson('loan-8', {
+          'toolName': 'Drill',
+          'teamName': 'Radiant Robotics',
+          'teamNumber': 3847,
+          'competition': 'Regional Championship',
+          'contact': 'a' * 900,
+          'checkedOutAt': checkedOutAt.toIso8601String(),
+          'returned': false,
+          'updatedAt': updatedAt.toIso8601String(),
+        });
+
+        expect(record.contact!.length, maxBorrowContactLength);
+      });
+
+      test('clamping never splits a surrogate pair', () {
+        final record = withContact('a${'\u{1F600}' * 200}');
+
+        expect(record.contact!.length, maxBorrowContactLength - 1);
+        expect(record.contact!.runes.last, 0x1F600);
+      });
+    });
   });
 }

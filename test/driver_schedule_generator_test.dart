@@ -91,6 +91,31 @@ void main() {
       );
     });
 
+    test('the largest allowed rotation stays quick and still fills (#267)', () {
+      final config = scheduleConfigs.last;
+      final inputs = <String, List<String>>{
+        for (final input in config.inputs)
+          input.key: [for (var i = 0; i < 12; i++) 'Person $i'],
+      };
+
+      final elapsed = Stopwatch()..start();
+      final schedule = DriverScheduleGenerator(
+        random: Random(11),
+      ).generate(config, inputs, slots: maxScheduleSlots, handoff: true);
+      elapsed.stop();
+
+      expect(elapsed.elapsed, lessThan(const Duration(seconds: 2)));
+      for (final roleKey in config.roleKeys) {
+        for (var slot = 0; slot < maxScheduleSlots; slot++) {
+          expect(
+            schedule.nameAt(roleKey, slot),
+            isNotEmpty,
+            reason: '$roleKey has a hole at slot $slot',
+          );
+        }
+      }
+    });
+
     test('spreads a role evenly when the slots divide by the names', () {
       final schedule = DriverScheduleGenerator(random: Random(3)).generate(
         singleRobotConfig,

@@ -2,14 +2,33 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 
 import '../models/driver_schedule.dart';
+import '../models/user_profile.dart';
+import '../models/user_role.dart';
 import '../services/driver_schedule_generator.dart';
+import '../services/driver_schedule_import.dart';
+import '../state/pit_shift_controller.dart';
 import '../theme/app_theme.dart';
 import '../theme/pit_palette.dart';
 
 class DriverScheduleScreen extends StatefulWidget {
-  const DriverScheduleScreen({super.key, this.generator});
+  const DriverScheduleScreen({
+    super.key,
+    this.generator,
+    this.knownPeople = const <String, String>{},
+    this.rosterStream,
+    this.shiftController,
+    this.competition,
+  });
 
   final DriverScheduleGenerator? generator;
+
+  final Map<String, String> knownPeople;
+
+  final Stream<List<UserProfile>>? rosterStream;
+
+  final PitShiftController? shiftController;
+
+  final String? competition;
 
   @override
   State<DriverScheduleScreen> createState() => _DriverScheduleScreenState();
@@ -162,8 +181,137 @@ class _DriverScheduleScreenState extends State<DriverScheduleScreen> {
           ),
           const SizedBox(height: 20),
           if (schedule != null) _ScheduleOutput(schedule: schedule),
+          if (schedule != null && !schedule.isEmpty && _canImport) ...[
+            const SizedBox(height: 8),
+            _ImportAction(
+              busy: _importing,
+              competition: widget.competition!,
+              onImport: () => _import(schedule),
+            ),
+          ],
         ],
       ),
+    );
+  }
+
+  bool _importing = false;
+
+  bool get _canImport =>
+      widget.shiftController != null &&
+      (widget.competition?.isNotEmpty ?? false);
+
+  Future<void> _import(DriverSchedule schedule) async {
+    final controller = widget.shiftController;
+    final competition = widget.competition;
+    if (controller == null || competition == null || competition.isEmpty) {
+      return;
+    }
+
+    final previous = DriverScheduleImport.previousImports(
+      controller.items,
+      competition,
+    );
+    var replace = false;
+    if (previous.isNotEmpty) {
+      final choice = await _askReplaceOrAdd(previous.length);
+      if (choice == null) return;
+      replace = choice;
+    }
+
+    final uidByName = {
+      for (final entry in widget.knownPeople.entries)
+        if (entry.value.trim().isNotEmpty) entry.value: entry.key,
+    };
+
+    final now = DateTime.now().toUtc();
+    final shifts = DriverScheduleImport.toShifts(
+      schedule: schedule,
+      competition: competition,
+      uidByName: uidByName,
+
+      idPrefix: 'drv-${now.millisecondsSinceEpoch}',
+      now: now,
+    );
+    if (shifts.isEmpty) {
+      _say('Nothing to import: no name is assigned to any match.');
+      return;
+    }
+
+    setState(() => _importing = true);
+    try {
+      if (replace) {
+        for (final stale in previous) {
+          await controller.delete(stale.id);
+        }
+      }
+      for (final shift in shifts) {
+        await controller.upsert(shift);
+      }
+      final unlinked = shifts.where((s) => s.hasUnlinkedAssignees).length;
+      _say(
+        replace
+            ? 'Replaced the previous import with ${shifts.length} shifts.'
+            : 'Added ${shifts.length} shifts to $competition.'
+                  '${unlinked == 0 ? '' : ' $unlinked have someone with no account.'}',
+      );
+    } catch (error) {
+      _say('Import failed: $error');
+    } finally {
+      if (mounted) setState(() => _importing = false);
+    }
+  }
+
+  Future<bool?> _askReplaceOrAdd(int existing) => showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Already imported'),
+      content: Text(
+        '$existing shift${existing == 1 ? '' : 's'} on this schedule came '
+        'from a previous import. Replace them, or add these alongside?',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: const Text('Add alongside'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          child: const Text('Replace'),
+        ),
+      ],
+    ),
+  );
+
+  void _say(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _openPeoplePicker(ScheduleInput input) {
+    final controller = _controllerFor(input.key);
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => _PeoplePickerSheet(
+        title: input.label,
+        known: widget.knownPeople,
+        rosterStream: widget.rosterStream,
+        onPick: (name) => _appendName(controller, name),
+      ),
+    );
+  }
+
+  void _appendName(TextEditingController controller, String name) {
+    final existing = controller.text.trimRight();
+    controller.text = existing.isEmpty ? name : '$existing\n$name';
+    controller.selection = TextSelection.collapsed(
+      offset: controller.text.length,
     );
   }
 
@@ -186,16 +334,27 @@ class _DriverScheduleScreenState extends State<DriverScheduleScreen> {
       widgets.add(
         Padding(
           padding: const EdgeInsets.only(bottom: 14),
-          child: TextField(
-            controller: _controllerFor(input.key),
-            minLines: 2,
-            maxLines: 5,
-            textInputAction: TextInputAction.newline,
-            decoration: InputDecoration(
-              labelText: input.label,
-              hintText: 'One name per line',
-              alignLabelWithHint: true,
-            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              TextField(
+                controller: _controllerFor(input.key),
+                minLines: 2,
+                maxLines: 5,
+                textInputAction: TextInputAction.newline,
+                decoration: InputDecoration(
+                  labelText: input.label,
+                  hintText: 'One name per line',
+                  alignLabelWithHint: true,
+                ),
+              ),
+
+              TextButton.icon(
+                onPressed: () => _openPeoplePicker(input),
+                icon: const Icon(Icons.person_add_alt, size: 18),
+                label: Text('Add people to ${input.label.toLowerCase()}'),
+              ),
+            ],
           ),
         ),
       );
@@ -414,19 +573,126 @@ class _ScheduleChart extends StatelessWidget {
 }
 
 enum _CellFlag {
-  conflict('Same-slot conflict'),
-  backToBack('Back-to-back'),
-  handoff('Operates, then drives next match');
+  conflict('Same-slot conflict', Icons.warning_amber_rounded),
+  backToBack('Back-to-back', Icons.fast_forward_rounded),
+  handoff('Operates, then drives next match', Icons.swap_horiz_rounded);
 
-  const _CellFlag(this.label);
+  const _CellFlag(this.label, this.icon);
 
   final String label;
+  final IconData icon;
 
   Color colorOf(BuildContext context) => switch (this) {
     _CellFlag.conflict => PitPalette.statusOverdueOf(context),
     _CellFlag.backToBack => PitPalette.statusPackingOf(context),
     _CellFlag.handoff => PitPalette.statusReadyOf(context),
   };
+}
+
+class _PeoplePickerSheet extends StatelessWidget {
+  const _PeoplePickerSheet({
+    required this.title,
+    required this.known,
+    required this.rosterStream,
+    required this.onPick,
+  });
+
+  final String title;
+  final Map<String, String> known;
+  final Stream<List<UserProfile>>? rosterStream;
+  final ValueChanged<String> onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final stream = rosterStream;
+    if (stream == null) return _body(context, const [], rosterFailed: false);
+    return StreamBuilder<List<UserProfile>>(
+      stream: stream,
+      builder: (context, snapshot) => _body(
+        context,
+        snapshot.data ?? const <UserProfile>[],
+        rosterFailed: snapshot.hasError,
+      ),
+    );
+  }
+
+  Widget _body(
+    BuildContext context,
+    List<UserProfile> roster, {
+    required bool rosterFailed,
+  }) {
+    final muted = PitPalette.inkMutedOf(context);
+
+    final byName = <String>{
+      for (final profile in roster)
+        if (profile.roles.isMember && profile.displayName.trim().isNotEmpty)
+          profile.displayName.trim(),
+      ...known.values,
+    }.toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Add to $title',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              byName.isEmpty
+                  ? 'Nobody to offer yet. Type the names instead.'
+                  : 'Tap a name to add it. Tap it twice for two turns.',
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: muted),
+            ),
+            if (rosterFailed) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Only people already on the schedule are listed.',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: muted),
+              ),
+            ],
+            const SizedBox(height: 12),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final name in byName)
+                      ActionChip(
+                        label: Text(name),
+
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 10,
+                        ),
+                        onPressed: () => onPick(name),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Done'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _HeaderCell extends StatelessWidget {
@@ -461,18 +727,33 @@ class _NameCell extends StatelessWidget {
     final cellFlag = flag;
     final label = name.isEmpty ? 'Nobody' : name;
 
+    final flagColor = cellFlag?.colorOf(context);
+
     return Semantics(
       label: cellFlag == null ? label : '$label, ${cellFlag.label}',
       excludeSemantics: true,
       child: Container(
         decoration: BoxDecoration(
-          color: cellFlag?.colorOf(context).withValues(alpha: 0.20),
-          border: selected ? Border.all(color: accent, width: 2) : null,
+          color: flagColor?.withValues(alpha: 0.20),
+          border: selected
+              ? Border.all(color: accent, width: 2)
+              : flagColor == null
+              ? null
+              : Border.all(color: flagColor),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        child: Text(
-          name.isEmpty ? '-' : name,
-          style: Theme.of(context).textTheme.bodyMedium,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (cellFlag != null) ...[
+              Icon(cellFlag.icon, size: 14, color: flagColor),
+              const SizedBox(width: 6),
+            ],
+            Text(
+              name.isEmpty ? '-' : name,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ],
         ),
       ),
     );
@@ -546,17 +827,19 @@ class _LegendItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final color = flag.colorOf(context);
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: 10,
-          height: 10,
+          padding: const EdgeInsets.all(3),
           decoration: BoxDecoration(
-            color: flag.colorOf(context).withValues(alpha: 0.20),
-            border: Border.all(color: flag.colorOf(context)),
-            shape: BoxShape.circle,
+            color: color.withValues(alpha: 0.20),
+            border: Border.all(color: color),
+            borderRadius: BorderRadius.circular(PitPalette.radiusSm),
           ),
+          child: Icon(flag.icon, size: 14, color: color),
         ),
         const SizedBox(width: 8),
         Text(flag.label, style: Theme.of(context).textTheme.bodySmall),
@@ -716,6 +999,46 @@ class _Framed extends StatelessWidget {
         border: Border.all(color: PitPalette.outlineOf(context)),
       ),
       child: child,
+    );
+  }
+}
+
+class _ImportAction extends StatelessWidget {
+  const _ImportAction({
+    required this.busy,
+    required this.competition,
+    required this.onImport,
+  });
+
+  final bool busy;
+  final String competition;
+  final VoidCallback onImport;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        FilledButton.icon(
+          onPressed: busy ? null : onImport,
+          icon: busy
+              ? const SizedBox(
+                  height: 16,
+                  width: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.event_available),
+          label: Text(busy ? 'Importing' : 'Add to the $competition schedule'),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'One match block per match, so a person double-booked against a pit '
+          'duty shows up as a conflict like any other clash.',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: PitPalette.inkMutedOf(context),
+          ),
+        ),
+      ],
     );
   }
 }

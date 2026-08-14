@@ -46,6 +46,8 @@ class _PackingTabState extends State<PackingTab> {
 
   final Map<String, String?> _containerPhotoKeys = <String, String?>{};
 
+  final Map<String, int> _containerPhotoWrites = <String, int>{};
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -218,6 +220,7 @@ class _PackingTabState extends State<PackingTab> {
   }
 
   Future<void> _loadContainerPhoto(String location) async {
+    final writes = _containerPhotoWrites[location] ?? 0;
     String? key;
     var failed = false;
     try {
@@ -226,6 +229,8 @@ class _PackingTabState extends State<PackingTab> {
       failed = true;
     }
     if (!mounted) return;
+
+    if ((_containerPhotoWrites[location] ?? 0) != writes) return;
     setState(() {
       if (failed) {
         _containerPhotoLoadFailed.add(location);
@@ -266,8 +271,13 @@ class _PackingTabState extends State<PackingTab> {
         return;
       }
       await widget.containerPhotoSyncService.writeKey(location, key);
+      _markContainerPhotoWritten(location);
       if (!mounted) return;
-      setState(() => _containerPhotoKeys[location] = key);
+      setState(() {
+        _containerPhotoKeys[location] = key;
+
+        _containerPhotoLoadFailed.remove(location);
+      });
       if (previous != null && previous != key) {
         await _deleteKey(previous, location);
       }
@@ -307,10 +317,18 @@ class _PackingTabState extends State<PackingTab> {
       _showFailure('remove the photo from "$location"', error);
       return;
     }
+    _markContainerPhotoWritten(location);
     await _deleteKey(key, location);
     if (!mounted) return;
-    setState(() => _containerPhotoKeys[location] = null);
+    setState(() {
+      _containerPhotoKeys[location] = null;
+      _containerPhotoLoadFailed.remove(location);
+    });
   }
+
+  void _markContainerPhotoWritten(String location) =>
+      _containerPhotoWrites[location] =
+          (_containerPhotoWrites[location] ?? 0) + 1;
 
   PackingRecord _current(PackingRecord record) => widget.controller.items
       .firstWhere((item) => item.id == record.id, orElse: () => record);
