@@ -286,7 +286,7 @@ service cloud.firestore {
     function isValidPitShift(data) {
       return data.keys().hasOnly(['label', 'kind', 'competition',
               'assignedUids', 'assignedNames', 'startMatch', 'endMatch',
-              'startsAt', 'endsAt', 'notes', 'updatedAt'])
+              'startsAt', 'endsAt', 'notes', 'importedFrom', 'updatedAt'])
         && data.label is string
         && data.label.size() <= 256
         && data.kind in ['loadIn', 'matchBlock', 'pitDuty', 'loadOut',
@@ -309,6 +309,9 @@ service cloud.firestore {
         && (!('endsAt' in data) || isSaneTimestamp(data.endsAt))
         && (!('notes' in data)
             || (data.notes is string && data.notes.size() <= 2048))
+
+        && (!('importedFrom' in data)
+            || data.importedFrom in ['driver-schedule'])
         && isSaneTimestamp(data.updatedAt);
     }
 

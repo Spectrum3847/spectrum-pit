@@ -6,6 +6,8 @@ import '../models/driver_schedule.dart';
 
 const int maxScheduleSlots = 500;
 
+const int _repairSearchRadius = 150;
+
 List<String> parseNameList(String text) => text
     .split(RegExp(r'[\n,]+'))
     .map((name) => name.trim())
@@ -195,19 +197,18 @@ class DriverScheduleGenerator {
           if (name.isEmpty) continue;
           if (seen.add(name)) continue;
 
-          for (var other = 0; other < slots; other++) {
+          for (
+            var other = _searchFrom(slot);
+            other <= _searchTo(slot, slots);
+            other++
+          ) {
             if (other == slot) continue;
             final candidate = _at(columns, roleKey, other);
             if (candidate.isEmpty || candidate == name) continue;
-            if (_othersIn(
-              columns,
-              slot,
-              roleKey,
-              roleKeys,
-            ).contains(candidate)) {
+            if (_otherRoleHolds(columns, slot, roleKey, roleKeys, candidate)) {
               continue;
             }
-            if (_othersIn(columns, other, roleKey, roleKeys).contains(name)) {
+            if (_otherRoleHolds(columns, other, roleKey, roleKeys, name)) {
               continue;
             }
             _swap(columns, roleKey, slot, other);
@@ -235,31 +236,30 @@ class DriverScheduleGenerator {
         for (final roleKey in roleKeys) {
           final name = _at(columns, roleKey, slot);
           if (name.isEmpty || !previous.contains(name)) continue;
-          for (var other = 0; other < slots; other++) {
+          for (
+            var other = _searchFrom(slot);
+            other <= _searchTo(slot, slots);
+            other++
+          ) {
             if (other == slot) continue;
             final candidate = _at(columns, roleKey, other);
 
             if (candidate.isEmpty || previous.contains(candidate)) continue;
-            if (_othersIn(
-              columns,
-              slot,
-              roleKey,
-              roleKeys,
-            ).contains(candidate)) {
+            if (_otherRoleHolds(columns, slot, roleKey, roleKeys, candidate)) {
               continue;
             }
-            if (_othersIn(columns, other, roleKey, roleKeys).contains(name)) {
+            if (_otherRoleHolds(columns, other, roleKey, roleKeys, name)) {
               continue;
             }
 
             if (other > 0 &&
                 other - 1 != slot &&
-                _namesIn(columns, other - 1, roleKeys).contains(name)) {
+                _slotHolds(columns, other - 1, roleKeys, name)) {
               continue;
             }
             if (other < slots - 1 &&
                 other + 1 != slot &&
-                _namesIn(columns, other + 1, roleKeys).contains(name)) {
+                _slotHolds(columns, other + 1, roleKeys, name)) {
               continue;
             }
             _swap(columns, roleKey, slot, other);
@@ -359,7 +359,7 @@ class DriverScheduleGenerator {
     for (var slot = 0; slot < slots - 1; slot++) {
       final wanted = _at(columns, pair.driver, slot + 1);
       if (wanted.isEmpty || (pool[wanted] ?? 0) == 0) continue;
-      if (_othersIn(columns, slot, pair.operator, roleKeys).contains(wanted)) {
+      if (_otherRoleHolds(columns, slot, pair.operator, roleKeys, wanted)) {
         continue;
       }
       pool[wanted] = pool[wanted]! - 1;
@@ -386,6 +386,11 @@ class DriverScheduleGenerator {
     }
     columns[pair.operator] = out;
   }
+
+  static int _searchFrom(int slot) => max(0, slot - _repairSearchRadius);
+
+  static int _searchTo(int slot, int slots) =>
+      min(slots - 1, slot + _repairSearchRadius);
 
   static String _at(
     Map<String, List<String>> columns,
@@ -416,6 +421,33 @@ class DriverScheduleGenerator {
       if (key != roleKey && _at(columns, key, slot).isNotEmpty)
         _at(columns, key, slot),
   };
+
+  static bool _otherRoleHolds(
+    Map<String, List<String>> columns,
+    int slot,
+    String roleKey,
+    List<String> roleKeys,
+    String name,
+  ) {
+    if (name.isEmpty) return false;
+    for (final key in roleKeys) {
+      if (key != roleKey && _at(columns, key, slot) == name) return true;
+    }
+    return false;
+  }
+
+  static bool _slotHolds(
+    Map<String, List<String>> columns,
+    int slot,
+    List<String> roleKeys,
+    String name,
+  ) {
+    if (name.isEmpty) return false;
+    for (final key in roleKeys) {
+      if (_at(columns, key, slot) == name) return true;
+    }
+    return false;
+  }
 
   static void _swap(
     Map<String, List<String>> columns,

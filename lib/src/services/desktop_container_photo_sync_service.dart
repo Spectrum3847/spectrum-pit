@@ -2,39 +2,26 @@ import 'package:firestore_client/firestore_client.dart' as fc;
 
 import 'container_photo_sync_service.dart';
 
-class DesktopContainerPhotoSyncService implements ContainerPhotoSyncService {
+class DesktopContainerPhotoSyncService
+    extends FirestoreDocContainerPhotoSyncService {
   DesktopContainerPhotoSyncService({required fc.Firestore firestore})
     : _firestore = firestore;
 
   final fc.Firestore _firestore;
 
-  static const String _collection = 'containerPhotos';
+  String _path(String docId) => '$containerPhotosCollection/$docId';
 
   @override
-  Future<String?> readKey(String location) async {
-    final doc = await _firestore.getDocument(
-      '$_collection/${containerPhotoDocId(location)}',
-    );
-    if (doc == null) return null;
-    final key = doc.fields['photoRef'];
-    if (key is! String || key.isEmpty) return null;
-    return key;
+  Future<Map<String, Object?>?> readDoc(String docId) async {
+    final doc = await _firestore.getDocument(_path(docId));
+    return doc?.fields;
   }
 
   @override
-  Future<void> writeKey(String location, String key) async {
-    await _firestore
-        .setDocument('$_collection/${containerPhotoDocId(location)}', {
-          'location': location,
-          'photoRef': key,
-          'updatedAt': DateTime.now().toUtc().toIso8601String(),
-        });
-  }
+  Future<void> setDoc(String docId, Map<String, Object?> fields) =>
+      _firestore.setDocument(_path(docId), fields);
 
   @override
-  Future<void> clearKey(String location) async {
-    await _firestore.deleteDocument(
-      '$_collection/${containerPhotoDocId(location)}',
-    );
-  }
+  Future<void> deleteDoc(String docId) =>
+      _firestore.deleteDocument(_path(docId));
 }

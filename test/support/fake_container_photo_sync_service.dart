@@ -7,6 +7,7 @@ class FakeContainerPhotoSyncService implements ContainerPhotoSyncService {
     Object? writeFailure,
     Object? clearFailure,
     this.onWriteKey,
+    this.onReadKey,
   }) : _readKeyValues = {...seed},
        _readFailure = readFailure,
        _writeFailure = writeFailure,
@@ -19,6 +20,8 @@ class FakeContainerPhotoSyncService implements ContainerPhotoSyncService {
 
   final Future<void> Function(String location, String key)? onWriteKey;
 
+  final Future<void> Function(String location)? onReadKey;
+
   final List<({String location, String key})> writeCalls = [];
 
   final List<String> readCalls = [];
@@ -29,7 +32,10 @@ class FakeContainerPhotoSyncService implements ContainerPhotoSyncService {
   Future<String?> readKey(String location) async {
     readCalls.add(location);
     if (_readFailure != null) throw _readFailure;
-    return _readKeyValues[location];
+
+    final value = _readKeyValues[location];
+    await onReadKey?.call(location);
+    return value;
   }
 
   @override

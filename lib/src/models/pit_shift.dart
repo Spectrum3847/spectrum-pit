@@ -13,6 +13,7 @@ class PitShift implements PitModel {
     this.startsAt,
     this.endsAt,
     this.notes,
+    this.importedFrom,
     required this.updatedAt,
   });
 
@@ -30,7 +31,22 @@ class PitShift implements PitModel {
   final DateTime? startsAt;
   final DateTime? endsAt;
   final String? notes;
+
+  final String? importedFrom;
+
   final DateTime updatedAt;
+
+  bool get isImported => importedFrom != null;
+
+  bool get hasUnlinkedAssignees =>
+      assignedUids.any((uid) => uid.startsWith(unlinkedUidPrefix));
+
+  static const String driverScheduleImport = 'driver-schedule';
+
+  static const String unlinkedUidPrefix = 'unlinked:';
+
+  static String unlinkedUid(String name) =>
+      '$unlinkedUidPrefix${name.trim().toLowerCase()}';
 
   bool get hasMatchRange => startMatch != null || endMatch != null;
 
@@ -87,6 +103,7 @@ class PitShift implements PitModel {
       startsAt: _dateTime(data['startsAt']),
       endsAt: _dateTime(data['endsAt']),
       notes: data['notes'] as String?,
+      importedFrom: data['importedFrom'] as String?,
       updatedAt:
           DateTime.tryParse(data['updatedAt'] as String? ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
@@ -115,6 +132,7 @@ class PitShift implements PitModel {
     if (startsAt != null) 'startsAt': startsAt!.toIso8601String(),
     if (endsAt != null) 'endsAt': endsAt!.toIso8601String(),
     if (notes != null) 'notes': notes,
+    if (importedFrom != null) 'importedFrom': importedFrom,
     'updatedAt': updatedAt.toIso8601String(),
   };
 
@@ -129,6 +147,7 @@ class PitShift implements PitModel {
     DateTime? startsAt,
     DateTime? endsAt,
     String? notes,
+    String? importedFrom,
     DateTime? updatedAt,
   }) {
     return PitShift(
@@ -143,6 +162,7 @@ class PitShift implements PitModel {
       startsAt: startsAt ?? this.startsAt,
       endsAt: endsAt ?? this.endsAt,
       notes: notes ?? this.notes,
+      importedFrom: importedFrom ?? this.importedFrom,
       updatedAt: updatedAt ?? this.updatedAt,
     );
   }

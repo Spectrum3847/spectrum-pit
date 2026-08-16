@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -703,6 +705,58 @@ void main() {
       expect(stored.containsKey('rc1-db.jpg'), isFalse);
       expect(stored.containsKey('key-0.jpg'), isTrue);
       expect(find.byTooltip('Open the container photo'), findsOneWidget);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('a read landing after a replacement does not undo it (#266)', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    try {
+      final controller = await _makeController();
+      final inventory = await _makeInventory(
+        initial: [_inventoryItem('inv-1')],
+      );
+      final stored = {'old.jpg': tinyPng};
+
+      final held = Completer<void>();
+      final syncService = FakeContainerPhotoSyncService(
+        seed: const {'RC1-DB': 'old.jpg'},
+        onReadKey: (_) => held.future,
+      );
+      await tester.pumpWidget(
+        _wrap(
+          controller,
+          inventory,
+          photoService: fakePhotoService(
+            stored: stored,
+            picker: (_) async =>
+                PickedPhoto(bytes: tinyPng, contentType: 'image/png'),
+          ),
+          containerPhotoSyncService: syncService,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.byTooltip('Add a container photo'));
+      await tester.pumpAndSettle();
+      expect(syncService.writeCalls.single.key, 'key-0.jpg');
+
+      held.complete();
+      await tester.pumpAndSettle();
+
+      expect(find.byTooltip('Open the container photo'), findsOneWidget);
+      await tester.tap(find.byTooltip('Open the container photo'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Remove'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Remove'));
+      await tester.pumpAndSettle();
+
+      expect(stored.containsKey('key-0.jpg'), isFalse);
+      expect(syncService.clearCalls, ['RC1-DB']);
     } finally {
       debugDefaultTargetPlatformOverride = null;
     }

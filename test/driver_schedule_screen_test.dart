@@ -3,6 +3,8 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:spectrumpit/src/models/user_profile.dart';
+import 'package:spectrumpit/src/models/user_role.dart';
 import 'package:spectrumpit/src/services/driver_schedule_generator.dart';
 import 'package:spectrumpit/src/theme/app_theme.dart';
 import 'package:spectrumpit/src/ui/driver_schedule_screen.dart';
@@ -44,6 +46,139 @@ void main() {
   }
 
   Finder chart() => find.byType(Table).first;
+
+  group('roster picker (#258)', () {
+    Future<void> pumpWithPeople(
+      WidgetTester tester, {
+      Map<String, String> known = const {},
+      Stream<List<UserProfile>>? roster,
+    }) async {
+      tester.view.physicalSize = const Size(1100, 3600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildDarkAppTheme(),
+          home: DriverScheduleScreen(
+            generator: DriverScheduleGenerator(random: Random(11)),
+            knownPeople: known,
+            rosterStream: roster,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> openPicker(WidgetTester tester, String role) async {
+      await tester.tap(find.text('Add people to ${role.toLowerCase()}'));
+      await tester.pumpAndSettle();
+    }
+
+    UserProfile profile(String uid, String name, {Set<UserRole>? roles}) =>
+        UserProfile(
+          uid: uid,
+          displayName: name,
+          roles: roles ?? const {UserRole.pit},
+        );
+
+    testWidgets('a picked name lands in that role, and twice for two turns', (
+      tester,
+    ) async {
+      await pumpWithPeople(tester, known: const {'uid-1': 'Alice'});
+      await openPicker(tester, 'Driver');
+
+      await tester.tap(find.widgetWithText(ActionChip, 'Alice'));
+      await tester.tap(find.widgetWithText(ActionChip, 'Alice'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Done'));
+      await tester.pumpAndSettle();
+
+      final field = tester.widget<TextField>(
+        find.widgetWithText(TextField, 'Driver'),
+      );
+      expect(field.controller!.text, 'Alice\nAlice');
+    });
+
+    testWidgets('a picked name appends rather than replacing what was typed', (
+      tester,
+    ) async {
+      await pumpWithPeople(tester, known: const {'uid-1': 'Alice'});
+      await tester.enterText(find.widgetWithText(TextField, 'Driver'), 'Bob\n');
+      await openPicker(tester, 'Driver');
+      await tester.tap(find.widgetWithText(ActionChip, 'Alice'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Done'));
+      await tester.pumpAndSettle();
+
+      final field = tester.widget<TextField>(
+        find.widgetWithText(TextField, 'Driver'),
+      );
+      expect(field.controller!.text, 'Bob\nAlice');
+    });
+
+    testWidgets('the roster adds to the people already on the schedule', (
+      tester,
+    ) async {
+      await pumpWithPeople(
+        tester,
+        known: const {'uid-1': 'Alice'},
+        roster: Stream.value([profile('uid-2', 'Cara')]),
+      );
+      await openPicker(tester, 'Driver');
+
+      expect(find.widgetWithText(ActionChip, 'Alice'), findsOneWidget);
+      expect(find.widgetWithText(ActionChip, 'Cara'), findsOneWidget);
+    });
+
+    testWidgets('a viewer is not offered, and a duplicate is listed once', (
+      tester,
+    ) async {
+      await pumpWithPeople(
+        tester,
+        known: const {'uid-1': 'Alice'},
+        roster: Stream.value([
+          profile('uid-1', 'Alice'),
+          profile('uid-3', 'Vic', roles: const {UserRole.viewer}),
+        ]),
+      );
+      await openPicker(tester, 'Driver');
+
+      expect(find.widgetWithText(ActionChip, 'Alice'), findsOneWidget);
+      expect(find.widgetWithText(ActionChip, 'Vic'), findsNothing);
+    });
+
+    testWidgets('an unreadable roster still offers the schedule names', (
+      tester,
+    ) async {
+      await pumpWithPeople(
+        tester,
+        known: const {'uid-1': 'Alice'},
+        roster: Stream<List<UserProfile>>.error(Exception('offline')),
+      );
+      await openPicker(tester, 'Driver');
+
+      expect(find.widgetWithText(ActionChip, 'Alice'), findsOneWidget);
+      expect(
+        find.text('Only people already on the schedule are listed.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('with nobody to offer, the sheet says to type instead', (
+      tester,
+    ) async {
+      await pumpWithPeople(tester);
+      await openPicker(tester, 'Driver');
+
+      expect(
+        find.text('Nobody to offer yet. Type the names instead.'),
+        findsOneWidget,
+      );
+      expect(find.byType(ActionChip), findsNothing);
+    });
+  });
 
   testWidgets('offers a name field per role and a generate action', (
     tester,
@@ -155,6 +290,29 @@ void main() {
 
     expect(find.text('Matches per person'), findsOneWidget);
     expect(find.text('Operates, then drives next match'), findsOneWidget);
+  });
+
+  testWidgets('a flagged cell carries a glyph, not just a tint (#269)', (
+    tester,
+  ) async {
+    await pumpScreen(tester);
+    await enterNames(tester, {
+      'Driver': 'Alice\nBob\nCara',
+      'Operator': 'Alice\nBob\nCara',
+    });
+    await generate(tester);
+    await tester.tap(find.byType(SwitchListTile));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Operates, then drives next match'), findsOneWidget);
+    expect(find.byIcon(Icons.swap_horiz_rounded), findsAtLeast(2));
+    expect(
+      find.descendant(
+        of: chart(),
+        matching: find.byIcon(Icons.swap_horiz_rounded),
+      ),
+      findsWidgets,
+    );
   });
 
   testWidgets('someone with no slots reads as zero, never as null', (
