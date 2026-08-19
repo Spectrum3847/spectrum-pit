@@ -574,9 +574,8 @@ class _DebugInfoCardState extends State<_DebugInfoCard> {
   Future<void> _copy(DebugInfo info) async {
     await Clipboard.setData(ClipboardData(text: info.toDisplayText()));
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Debug info copied')));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Debug info copied')));
   }
 
   @override

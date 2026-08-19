@@ -192,6 +192,8 @@ class _ScheduleTabState extends State<ScheduleTab> {
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+
+      showDragHandle: true,
       builder: (sheetContext) => _ShiftEditorSheet(
         shift: shift,
         unavailable: unavailable,
@@ -258,9 +260,8 @@ class _ScheduleTabState extends State<ScheduleTab> {
 
   void _showSyncError(String action, Object error) {
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('Could not $action: $error')));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('Could not $action: $error')));
   }
 }
 
@@ -357,9 +358,8 @@ class _ConflictPanel extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 count == 1 ? '1 conflict' : '$count conflicts',
-                style: Theme.of(
-                  context,
-                ).textTheme.labelLarge?.copyWith(color: alert),
+                style: Theme.of(context).textTheme.labelLarge
+                    ?.copyWith(color: alert),
               ),
             ],
           ),
@@ -470,9 +470,8 @@ class _ShiftRow extends StatelessWidget {
                     Expanded(
                       child: Text(
                         _labelOf(shift),
-                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: Theme.of(context).textTheme.bodyLarge
+                            ?.copyWith(fontWeight: FontWeight.w600),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -493,9 +492,8 @@ class _ShiftRow extends StatelessWidget {
                           names.join(', '),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(
-                            context,
-                          ).textTheme.bodyMedium?.copyWith(color: muted),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: muted),
                         ),
                       ),
                     ],
@@ -509,9 +507,8 @@ class _ShiftRow extends StatelessWidget {
                       const SizedBox(width: 6),
                       Text(
                         'Conflict',
-                        style: Theme.of(
-                          context,
-                        ).textTheme.labelLarge?.copyWith(color: alert),
+                        style: Theme.of(context).textTheme.labelLarge
+                            ?.copyWith(color: alert),
                       ),
                     ],
                   ),
@@ -632,9 +629,8 @@ class _DriverScheduleEntry extends StatelessWidget {
                       Text(
                         'Generate a balanced match rotation for drivers, '
                         'operators, technicians, and human players.',
-                        style: Theme.of(
-                          context,
-                        ).textTheme.bodyMedium?.copyWith(color: muted),
+                        style: Theme.of(context).textTheme.bodyMedium
+                            ?.copyWith(color: muted),
                       ),
                     ],
                   ),
@@ -735,9 +731,8 @@ class _Slot extends StatelessWidget {
                 Text(
                   body,
                   textAlign: TextAlign.center,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(color: muted),
+                  style: Theme.of(context).textTheme.bodyMedium
+                      ?.copyWith(color: muted),
                 ),
                 if (action != null) ...[const SizedBox(height: 16), action!],
               ],
@@ -1008,9 +1003,8 @@ class _ShiftEditorSheetState extends State<_ShiftEditorSheet> {
                 Text(
                   'Nobody else is changed. The crew sees this time as yours, and '
                   'anything scheduled over it is flagged.',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(color: muted),
+                  style: Theme.of(context).textTheme.bodyMedium
+                      ?.copyWith(color: muted),
                 ),
               ],
               const SizedBox(height: 12),
@@ -1055,9 +1049,8 @@ class _ShiftEditorSheetState extends State<_ShiftEditorSheet> {
               const SizedBox(height: 16),
               Text(
                 'Scheduled by',
-                style: Theme.of(
-                  context,
-                ).textTheme.labelLarge?.copyWith(color: muted),
+                style: Theme.of(context).textTheme.labelLarge
+                    ?.copyWith(color: muted),
               ),
               const SizedBox(height: 8),
               SegmentedButton<_RangeMode>(
@@ -1081,9 +1074,8 @@ class _ShiftEditorSheetState extends State<_ShiftEditorSheet> {
                 _mode == _RangeMode.match
                     ? 'Match numbers only. Clock times are ignored.'
                     : 'Clock times only. Match numbers are ignored.',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(color: muted),
+                style: Theme.of(context).textTheme.bodyMedium
+                    ?.copyWith(color: muted),
               ),
               const SizedBox(height: 12),
               if (_mode == _RangeMode.match)
@@ -1143,9 +1135,8 @@ class _ShiftEditorSheetState extends State<_ShiftEditorSheet> {
                 const SizedBox(height: 16),
                 Text(
                   'Assigned to',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.labelLarge?.copyWith(color: muted),
+                  style: Theme.of(context).textTheme.labelLarge
+                      ?.copyWith(color: muted),
                 ),
                 const SizedBox(height: 8),
                 _AssigneePicker(
@@ -1244,9 +1235,8 @@ class _AssigneePicker extends StatelessWidget {
               Text(
                 'Only people already on the schedule are listed. Ask an admin '
                 'to add anyone missing.',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: PitPalette.inkMutedOf(context),
-                ),
+                style: Theme.of(context).textTheme.bodyMedium
+                    ?.copyWith(color: PitPalette.inkMutedOf(context)),
               ),
             ],
           ],

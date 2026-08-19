@@ -4,11 +4,7 @@ import 'package:uuid/uuid.dart';
 import 'debug_info.dart';
 
 class IssueReportService {
-  IssueReportService({
-    FirebaseFirestore? firestore,
-    Future<void> Function(String docPath, Map<String, dynamic> data)? write,
-  }) : _firestore = firestore,
-       _write = write;
+  IssueReportService({this._firestore, this._write});
 
   final FirebaseFirestore? _firestore;
 

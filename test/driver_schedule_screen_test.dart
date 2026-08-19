@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -5,7 +6,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:spectrumpit/src/models/user_profile.dart';
 import 'package:spectrumpit/src/models/user_role.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:spectrumpit/src/models/driver_schedule.dart';
 import 'package:spectrumpit/src/services/driver_schedule_generator.dart';
+import 'package:spectrumpit/src/services/driver_schedule_store.dart';
 import 'package:spectrumpit/src/theme/app_theme.dart';
 import 'package:spectrumpit/src/ui/driver_schedule_screen.dart';
 
@@ -177,6 +181,40 @@ void main() {
         findsOneWidget,
       );
       expect(find.byType(ActionChip), findsNothing);
+    });
+
+    testWidgets('a roster still loading does not read as an empty one', (
+      tester,
+    ) async {
+      final roster = StreamController<List<UserProfile>>();
+      addTearDown(roster.close);
+      await pumpWithPeople(tester, roster: roster.stream);
+      await openPicker(tester, 'Driver');
+
+      expect(find.text('Looking for people.'), findsOneWidget);
+      expect(
+        find.text('Nobody to offer yet. Type the names instead.'),
+        findsNothing,
+      );
+
+      roster.add([profile('uid-2', 'Cara')]);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Looking for people.'), findsNothing);
+      expect(find.widgetWithText(ActionChip, 'Cara'), findsOneWidget);
+    });
+
+    testWidgets('an empty roster that has arrived says to type instead', (
+      tester,
+    ) async {
+      await pumpWithPeople(tester, roster: Stream.value(const <UserProfile>[]));
+      await openPicker(tester, 'Driver');
+
+      expect(
+        find.text('Nobody to offer yet. Type the names instead.'),
+        findsOneWidget,
+      );
+      expect(find.text('Looking for people.'), findsNothing);
     });
   });
 
@@ -391,5 +429,61 @@ void main() {
     expect(copied!.split('\n').first, startsWith('#\tDriver'));
     expect(copied!.split('\n').length, 7);
     expect(find.text('Schedule copied'), findsOneWidget);
+  });
+
+  group('a saved rotation', () {
+    setUp(() => SharedPreferences.setMockInitialValues(<String, Object>{}));
+
+    testWidgets('comes back when the screen is reopened', (tester) async {
+      final store = DriverScheduleStore();
+      await store.save(
+        'Houston',
+        SavedDriverSchedule(
+          mode: singleRobotConfig.label,
+          slots: 4,
+          handoff: false,
+          inputs: const {
+            'driver': ['Ada', 'Bo'],
+            'operator': ['Cy'],
+          },
+          grid: const {
+            'driver': ['Ada', 'Bo', 'Ada', 'Bo'],
+            'operator': ['Cy', 'Cy', 'Cy', 'Cy'],
+          },
+          updatedAt: DateTime.utc(2026, 8, 14),
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildDarkAppTheme(),
+          home: DriverScheduleScreen(
+            competition: 'Houston',
+            store: store,
+            generator: DriverScheduleGenerator(random: Random(1)),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Ada\nBo'), findsOneWidget);
+      expect(find.text('Cy'), findsOneWidget);
+    });
+
+    testWidgets('a competition with none starts empty', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildDarkAppTheme(),
+          home: DriverScheduleScreen(
+            competition: 'Dallas',
+            store: DriverScheduleStore(),
+            generator: DriverScheduleGenerator(random: Random(1)),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Ada\nBo'), findsNothing);
+    });
   });
 }

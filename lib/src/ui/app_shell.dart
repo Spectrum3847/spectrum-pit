@@ -9,6 +9,7 @@ import '../services/map_image_store.dart';
 import '../services/photo_service.dart';
 import '../services/spectrum_auth_service.dart';
 import '../services/telemetry_service.dart';
+import '../services/usage_rollup_service.dart';
 import '../state/borrow_controller.dart';
 import '../state/inventory_controller.dart';
 import '../state/map_location_controller.dart';
@@ -25,6 +26,7 @@ import 'maps_tab.dart';
 import 'packing_tab.dart';
 import 'schedule_tab.dart';
 import 'settings_tab.dart';
+import 'usage_tab.dart';
 import 'sign_in_screen.dart';
 import 'user_management_screen.dart';
 
@@ -43,6 +45,7 @@ class AppShell extends StatefulWidget {
     required this.pitShiftController,
     this.issueReportService,
     this.telemetryService,
+    this.usageRollupService,
     super.key,
   });
 
@@ -59,6 +62,8 @@ class AppShell extends StatefulWidget {
   final PitShiftController pitShiftController;
   final IssueReportService? issueReportService;
   final TelemetryService? telemetryService;
+
+  final UsageRollupService? usageRollupService;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -102,6 +107,11 @@ const _kTabMeta = [
     label: 'Settings',
     icon: Icons.settings_outlined,
     selectedIcon: Icons.settings_rounded,
+  ),
+  (
+    label: 'Usage',
+    icon: Icons.insights_outlined,
+    selectedIcon: Icons.insights_rounded,
   ),
 ];
 
@@ -236,6 +246,10 @@ class _AppShellState extends State<AppShell> {
         return DocsTab(roles: widget.userRoleController.roles);
       case 6:
         return UserManagementBody(roleController: widget.userRoleController);
+      case AppTabs.usage:
+        return UsageTab(
+          service: widget.usageRollupService ?? FirestoreUsageRollupService(),
+        );
       default:
         return SettingsTab(
           themeController: widget.themeController,
@@ -278,11 +292,6 @@ class _AppShellState extends State<AppShell> {
   List<Widget> _buildAppBarActions() {
     final secondary = _secondaryTabIndices;
     return [
-      IconButton(
-        onPressed: _openSignIn,
-        tooltip: 'Account',
-        icon: const Icon(Icons.account_circle_outlined),
-      ),
       if (secondary.isNotEmpty)
         PopupMenuButton<int>(
           tooltip: 'More',
@@ -302,6 +311,12 @@ class _AppShellState extends State<AppShell> {
               ),
           ],
         ),
+
+      IconButton(
+        onPressed: _openSignIn,
+        tooltip: 'Account',
+        icon: const Icon(Icons.account_circle_outlined),
+      ),
     ];
   }
 

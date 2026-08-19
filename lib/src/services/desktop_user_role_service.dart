@@ -8,10 +8,9 @@ import 'user_role_service_interface.dart';
 
 class DesktopUserRoleService implements UserRoleService {
   DesktopUserRoleService({
-    required fc.Firestore firestore,
-    Duration pollInterval = const Duration(seconds: 30),
-  }) : _firestore = firestore,
-       _pollInterval = pollInterval;
+    required this._firestore,
+    this._pollInterval = const Duration(seconds: 30),
+  });
 
   final fc.Firestore _firestore;
   final Duration _pollInterval;

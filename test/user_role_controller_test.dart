@@ -15,6 +15,8 @@ void main() {
     AppTabs.schedule,
   ];
   const pitTabs = [...featureTabs, AppTabs.docs, AppTabs.settings];
+
+  const developerTabs = [...pitTabs, AppTabs.usage];
   const adminTabs = [
     ...featureTabs,
     AppTabs.docs,
@@ -78,9 +80,9 @@ void main() {
       expect(roles.canManageUsers, isTrue);
     });
 
-    test('developer: feature tabs + Docs + Settings, no Users, isDebug', () {
+    test('developer: pit tabs plus Usage, no Users, isDebug', () {
       final roles = {UserRole.developer};
-      expect(roles.visibleTabIndices, pitTabs);
+      expect(roles.visibleTabIndices, developerTabs);
       expect(roles.isDebug, isTrue);
       expect(roles.canManageUsers, isFalse);
     });
@@ -91,11 +93,25 @@ void main() {
       expect(roles.canManageUsers, isTrue);
     });
 
+    test('Usage is developer-only, admin included', () {
+      for (final role in [UserRole.admin, UserRole.pit, UserRole.viewer]) {
+        expect(
+          {role}.visibleTabIndices,
+          isNot(contains(AppTabs.usage)),
+          reason: '$role should not see the Usage tab',
+        );
+      }
+      expect(
+        const {UserRole.developer}.visibleTabIndices,
+        contains(AppTabs.usage),
+      );
+    });
+
     test(
       'multi-role union: admin + developer = all tabs + isDebug + canManage',
       () {
         final roles = {UserRole.admin, UserRole.developer};
-        expect(roles.visibleTabIndices, adminTabs);
+        expect(roles.visibleTabIndices, [...adminTabs, AppTabs.usage]);
         expect(roles.canManageUsers, isTrue);
         expect(roles.isDebug, isTrue);
       },

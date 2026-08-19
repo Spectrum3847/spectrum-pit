@@ -9,7 +9,7 @@ Thanks for your interest. This repository is a release mirror, which changes the
 
 ## Before you open a PR
 
-- Toolchain: Flutter 3.44.4 / Dart 3.11.5.
+- Toolchain: Flutter 3.47.0 / Dart 3.13.0.
 - Run the same gates CI runs:
 
 ```bash

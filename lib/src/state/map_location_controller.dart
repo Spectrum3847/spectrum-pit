@@ -10,10 +10,9 @@ import 'pit_controller_mixin.dart';
 class MapLocationController extends ChangeNotifier
     with PitControllerMixin<MapLocation> {
   MapLocationController({
-    required SpectrumAuthService authService,
-    required MapLocationSyncService syncService,
-  }) : _authService = authService,
-       _syncService = syncService;
+    required this._authService,
+    required this._syncService,
+  });
 
   static const String _cacheKey = 'pit_map_locations_cache';
 

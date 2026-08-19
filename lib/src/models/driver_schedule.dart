@@ -233,10 +233,9 @@ class DriverSchedule {
     required this.config,
     required this.slots,
     required this.handoff,
-    required Map<String, List<String>> columns,
-    required Map<String, Set<String>> rosters,
-  }) : _columns = columns,
-       _rosters = rosters;
+    required this._columns,
+    required this._rosters,
+  });
 
   final ScheduleConfig config;
 

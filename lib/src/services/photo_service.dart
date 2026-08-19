@@ -32,20 +32,17 @@ class PhotoException implements Exception {
 
 class PhotoService {
   PhotoService({
-    required Future<String?> Function() idToken,
+    required this._idToken,
     Uri? baseUrl,
     http.Client? httpClient,
     Future<PickedPhoto?> Function(PhotoSource source)? picker,
-    int cacheLimit = _defaultCacheLimit,
-    PhotoDiskCache? diskCache,
-  }) : _idToken = idToken,
-       _diskCache = diskCache,
-       _baseUrl = baseUrl ?? Uri.parse(_defaultBaseUrl),
+    this._cacheLimit = _defaultCacheLimit,
+    this._diskCache,
+  }) : _baseUrl = baseUrl ?? Uri.parse(_defaultBaseUrl),
 
        _client =
            httpClient ?? TimeoutHttpClient(timeout: const Duration(minutes: 1)),
-       _picker = picker ?? _defaultPicker,
-       _cacheLimit = cacheLimit;
+       _picker = picker ?? _defaultPicker;
 
   static const String _defaultBaseUrl =
       'https://spectrumpit-photos.spectrum-3847.workers.dev';

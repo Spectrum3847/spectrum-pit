@@ -34,6 +34,51 @@
 </head>
 <body>
   <!--
+    Prime IndexedDB for Firebase Auth before Flutter loads.
+
+    iPad Safari in desktop mode (default since iPadOS 13) can fail the
+    first IndexedDB read, which permanently wedges Firebase Auth: no
+    auth state listener fires, signInWithPopup hangs, and signOut
+    cannot recover (firebase/firebase-js-sdk#10311).
+
+    The databases are created exactly as the SDK does, object store and
+    keyPath included (auth: packages/auth indexed_db.ts, heartbeat:
+    packages/app indexeddb.ts). A database that exists at version 1
+    without its store would send the auth SDK through its
+    delete-and-recreate recovery on every load, which is the flaky path
+    this script exists to avoid, so a store found missing here is
+    repaired the same way (#329).
+  -->
+  <script>
+    (function() {
+      function prime(name, store, options, retried) {
+        try {
+          var req = indexedDB.open(name, 1);
+          req.onupgradeneeded = function() {
+            if (!req.result.objectStoreNames.contains(store)) {
+              req.result.createObjectStore(store, options);
+            }
+          };
+          req.onsuccess = function() {
+            var healthy = req.result.objectStoreNames.contains(store);
+            req.result.close();
+            if (!healthy && !retried) {
+              var del = indexedDB.deleteDatabase(name);
+              del.onsuccess = function() { prime(name, store, options, true); };
+            }
+          };
+        } catch (e) {}
+      }
+      prime('firebaseLocalStorageDb', 'firebaseLocalStorage',
+          { keyPath: 'fbase_key' }, false);
+      prime('firebase-heartbeat-database', 'firebase-heartbeat-store',
+          undefined, false);
+      // An earlier version of this script created this misnamed, empty
+      // database; the SDK never opens it (#329).
+      try { indexedDB.deleteDatabase('firebase-heartbeat-storage'); } catch (e) {}
+    })();
+  </script>
+  <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader
     or to give the user feedback during the initialization process.

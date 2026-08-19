@@ -9,11 +9,7 @@ import 'pit_controller_mixin.dart';
 
 class PackingController extends ChangeNotifier
     with PitControllerMixin<PackingRecord> {
-  PackingController({
-    required SpectrumAuthService authService,
-    required PackingSyncService syncService,
-  }) : _authService = authService,
-       _syncService = syncService;
+  PackingController({required this._authService, required this._syncService});
 
   static const String _cacheKey = 'pit_packing_cache';
 

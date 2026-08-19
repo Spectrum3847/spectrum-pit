@@ -69,4 +69,36 @@ class DriverScheduleImport {
           shift.importedFrom == PitShift.driverScheduleImport)
         shift,
   ];
+
+  static Future<void> commit({
+    required List<PitShift> shifts,
+    required List<PitShift> previous,
+    required bool replace,
+    required Future<void> Function(PitShift shift) upsert,
+    required Future<void> Function(String id) delete,
+  }) async {
+    for (final shift in shifts) {
+      await upsert(shift);
+    }
+    if (!replace) return;
+    for (final stale in previous) {
+      await delete(stale.id);
+    }
+  }
+
+  static String summaryOf(
+    List<PitShift> shifts, {
+    required String competition,
+    required bool replace,
+  }) {
+    final count = '${shifts.length} shift${shifts.length == 1 ? '' : 's'}';
+    final unlinked = shifts.where((s) => s.hasUnlinkedAssignees).length;
+    final note = unlinked == 0
+        ? ''
+        : ' $unlinked ${unlinked == 1 ? 'has' : 'have'} someone with no'
+              ' account.';
+    return replace
+        ? 'Replaced the previous import with $count.$note'
+        : 'Added $count to $competition.$note';
+  }
 }

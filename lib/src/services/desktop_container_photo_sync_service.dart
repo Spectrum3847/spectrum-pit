@@ -4,8 +4,7 @@ import 'container_photo_sync_service.dart';
 
 class DesktopContainerPhotoSyncService
     extends FirestoreDocContainerPhotoSyncService {
-  DesktopContainerPhotoSyncService({required fc.Firestore firestore})
-    : _firestore = firestore;
+  DesktopContainerPhotoSyncService({required this._firestore});
 
   final fc.Firestore _firestore;
 

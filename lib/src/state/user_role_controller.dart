@@ -8,11 +8,7 @@ import '../services/spectrum_auth_service.dart';
 import '../services/user_role_service_interface.dart';
 
 class UserRoleController extends ChangeNotifier {
-  UserRoleController({
-    required SpectrumAuthService authService,
-    required UserRoleService roleService,
-  }) : _authService = authService,
-       _roleService = roleService;
+  UserRoleController({required this._authService, required this._roleService});
 
   final SpectrumAuthService _authService;
   final UserRoleService _roleService;
