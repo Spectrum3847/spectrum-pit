@@ -88,6 +88,8 @@ class _BorrowTabState extends State<BorrowTab> {
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+
+      showDragHandle: true,
       builder: (sheetContext) => _BorrowEditorSheet(
         record: record,
         onSubmit: (result) {
@@ -254,9 +256,8 @@ class _TeamLabel extends StatelessWidget {
         children: <InlineSpan>[
           TextSpan(
             text: 'Team ',
-            style: Theme.of(
-              context,
-            ).textTheme.labelLarge?.copyWith(color: muted),
+            style: Theme.of(context).textTheme.labelLarge
+                ?.copyWith(color: muted),
           ),
           TextSpan(
             text: number.toString(),
@@ -265,9 +266,8 @@ class _TeamLabel extends StatelessWidget {
           if (name.isNotEmpty)
             TextSpan(
               text: ' $name',
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: muted),
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(color: muted),
             ),
         ],
       ),
@@ -386,9 +386,8 @@ class _TimestampLabel extends StatelessWidget {
         children: <InlineSpan>[
           TextSpan(
             text: '$label ',
-            style: Theme.of(
-              context,
-            ).textTheme.labelLarge?.copyWith(color: color),
+            style: Theme.of(context).textTheme.labelLarge
+                ?.copyWith(color: color),
           ),
           TextSpan(
             text: value,
@@ -418,9 +417,8 @@ class _ReturnedChip extends StatelessWidget {
           const SizedBox(width: 4),
           Text(
             'Returned',
-            style: Theme.of(
-              context,
-            ).textTheme.labelLarge?.copyWith(color: color),
+            style: Theme.of(context).textTheme.labelLarge
+                ?.copyWith(color: color),
           ),
         ],
       ),
@@ -448,9 +446,8 @@ class _OverdueChip extends StatelessWidget {
           const SizedBox(width: 4),
           Text(
             'Overdue',
-            style: Theme.of(
-              context,
-            ).textTheme.labelLarge?.copyWith(color: color),
+            style: Theme.of(context).textTheme.labelLarge
+                ?.copyWith(color: color),
           ),
         ],
       ),
@@ -489,9 +486,8 @@ class _EmptyBoard extends StatelessWidget {
                 Text(
                   'Check out a tool to another team to start tracking.',
                   textAlign: TextAlign.center,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(color: muted),
+                  style: Theme.of(context).textTheme.bodyMedium
+                      ?.copyWith(color: muted),
                 ),
                 const SizedBox(height: 16),
                 FilledButton.icon(
@@ -781,9 +777,8 @@ class _BorrowEditorSheetState extends State<_BorrowEditorSheet> {
               const SizedBox(height: 16),
               Text(
                 'Checkout time',
-                style: Theme.of(
-                  context,
-                ).textTheme.labelLarge?.copyWith(color: muted),
+                style: Theme.of(context).textTheme.labelLarge
+                    ?.copyWith(color: muted),
               ),
               const SizedBox(height: 8),
               OutlinedButton.icon(
@@ -794,9 +789,8 @@ class _BorrowEditorSheetState extends State<_BorrowEditorSheet> {
               const SizedBox(height: 12),
               Text(
                 'Estimated return (optional)',
-                style: Theme.of(
-                  context,
-                ).textTheme.labelLarge?.copyWith(color: muted),
+                style: Theme.of(context).textTheme.labelLarge
+                    ?.copyWith(color: muted),
               ),
               const SizedBox(height: 8),
               OutlinedButton.icon(

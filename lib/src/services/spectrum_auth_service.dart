@@ -5,6 +5,22 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:google_sign_in/google_sign_in.dart';
 
+const Set<String> _popupBlockedAuthCodes = {
+  'popup-blocked',
+  'popup-blocked-by-user',
+  'cancelled-popup-request',
+  'operation-not-supported-in-this-environment',
+};
+
+bool isPopupBlockedAuthError(Object error) {
+  return error is FirebaseAuthException &&
+      _popupBlockedAuthCodes.contains(error.code);
+}
+
+bool isPopupPersistenceAuthError(Object error) {
+  return error.toString().contains('Database is closing/hidden');
+}
+
 class SpectrumUser {
   const SpectrumUser({
     required this.uid,
@@ -91,6 +107,12 @@ class FirebaseSpectrumAuthService implements SpectrumAuthService {
     }
 
     await _authStateSubscription?.cancel();
+
+    if (kIsWeb) {
+      try {
+        await _appAuth.getRedirectResult();
+      } catch (_) {}
+    }
     _authStateSubscription = _appAuth.authStateChanges().listen((user) {
       if (user == null) {
         if (_snapshot.state != SpectrumAuthState.signingIn) {
@@ -124,7 +146,18 @@ class FirebaseSpectrumAuthService implements SpectrumAuthService {
     try {
       final UserCredential result;
       if (kIsWeb) {
-        result = await _appAuth.signInWithPopup(GoogleAuthProvider());
+        try {
+          result = await _appAuth.signInWithPopup(GoogleAuthProvider());
+        } catch (popupError) {
+          if (!isPopupBlockedAuthError(popupError) &&
+              !isPopupPersistenceAuthError(popupError)) {
+            rethrow;
+          }
+          debugPrint('Popup sign-in failed, trying redirect: $popupError');
+          await _appAuth.signInWithRedirect(GoogleAuthProvider());
+
+          return;
+        }
       } else {
         final account = await _googleSignIn.authenticate();
         final auth = account.authentication;
@@ -175,6 +208,8 @@ class FirebaseSpectrumAuthService implements SpectrumAuthService {
           return 'Google sign-in is not enabled for this app.';
         case 'unauthorized-domain':
           return 'This site is not authorized for sign-in. Contact an admin.';
+        case 'popup-blocked-by-user':
+          return 'The sign-in popup was blocked by your browser. Please allow popups for this site and try again.';
       }
     }
     return 'Sign-in failed. Please try again.';

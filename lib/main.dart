@@ -39,6 +39,7 @@ import 'src/services/http_timeout_client.dart';
 import 'src/services/spectrum_auth_service.dart';
 import 'src/services/user_role_service.dart';
 import 'src/services/user_role_service_interface.dart';
+import 'src/services/web_auth_domain.dart';
 import 'src/state/borrow_controller.dart';
 import 'src/state/inventory_controller.dart';
 import 'src/state/map_location_controller.dart';
@@ -64,9 +65,13 @@ Future<void> main() async {
 
   var firebaseReady = false;
   try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
+    final options = kIsWeb
+        ? webFirebaseOptionsForHost(
+            Uri.base.host,
+            DefaultFirebaseOptions.currentPlatform,
+          )
+        : DefaultFirebaseOptions.currentPlatform;
+    await Firebase.initializeApp(options: options);
     firebaseReady = true;
   } catch (error) {
     debugPrint('Firebase unavailable: $error');

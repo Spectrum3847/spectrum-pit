@@ -402,9 +402,8 @@ class _PackingTabState extends State<PackingTab> {
 
   void _showFailure(String action, Object error) {
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('Could not $action: $error')));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('Could not $action: $error')));
   }
 
   Future<void> _openEditor({_PackingRowData? row}) {
@@ -414,6 +413,8 @@ class _PackingTabState extends State<PackingTab> {
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+
+      showDragHandle: true,
       builder: (sheetContext) => _RecordEditorSheet(
         record: record,
         item: item,
@@ -568,9 +569,8 @@ class _PackingRow extends StatelessWidget {
                 Expanded(
                   child: Text(
                     displayName,
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: Theme.of(context).textTheme.bodyLarge
+                        ?.copyWith(fontWeight: FontWeight.w600),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -629,9 +629,8 @@ class _StatusChip extends StatelessWidget {
                     child: Text(
                       _statusLabel(status),
                       softWrap: false,
-                      style: Theme.of(
-                        context,
-                      ).textTheme.labelLarge?.copyWith(color: fg),
+                      style: Theme.of(context).textTheme.labelLarge
+                          ?.copyWith(color: fg),
                     ),
                   ),
                 ),
@@ -947,9 +946,8 @@ class _PhotoSection extends StatelessWidget {
                     const SizedBox(height: 6),
                     Text(
                       busy ? 'Uploading' : 'Add photo',
-                      style: Theme.of(
-                        context,
-                      ).textTheme.labelMedium?.copyWith(color: muted),
+                      style: Theme.of(context).textTheme.labelMedium
+                          ?.copyWith(color: muted),
                     ),
                   ],
                 ),
@@ -993,9 +991,8 @@ class _EmptyBoard extends StatelessWidget {
                 Text(
                   'Add items to start tracking the load-out.',
                   textAlign: TextAlign.center,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(color: muted),
+                  style: Theme.of(context).textTheme.bodyMedium
+                      ?.copyWith(color: muted),
                 ),
                 const SizedBox(height: 16),
                 FilledButton.icon(
@@ -1139,9 +1136,8 @@ class _RecordEditorSheetState extends State<_RecordEditorSheet> {
 
   void _showFailure(String action, Object error) {
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('Could not $action: $error')));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('Could not $action: $error')));
   }
 
   Future<void> _save() async {
@@ -1250,9 +1246,8 @@ class _RecordEditorSheetState extends State<_RecordEditorSheet> {
               const SizedBox(height: 16),
               Text(
                 'Packing status',
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: PitPalette.inkMutedOf(context),
-                ),
+                style: Theme.of(context).textTheme.labelLarge
+                    ?.copyWith(color: PitPalette.inkMutedOf(context)),
               ),
               const SizedBox(height: 8),
               SegmentedButton<PackingStatus>(

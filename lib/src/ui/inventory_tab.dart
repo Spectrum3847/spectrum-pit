@@ -57,6 +57,8 @@ class _InventoryTabState extends State<InventoryTab> {
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+
+      showDragHandle: true,
       builder: (sheetContext) => _ItemEditorSheet(
         item: item,
         onSubmit: (result) {
@@ -87,9 +89,8 @@ class _InventoryTabState extends State<InventoryTab> {
 
   void _showSyncError(String action, Object error) {
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('Could not $action: $error')));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('Could not $action: $error')));
   }
 
   Future<bool> _confirmDelete(BuildContext context, String name) async {
@@ -252,9 +253,8 @@ class _InventoryRow extends StatelessWidget {
                     children: [
                       Text(
                         item.name,
-                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: Theme.of(context).textTheme.bodyLarge
+                            ?.copyWith(fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 6),
                       Wrap(
@@ -314,9 +314,8 @@ class _StatusTag extends StatelessWidget {
               const SizedBox(width: 6),
               Text(
                 _statusLabel(status),
-                style: Theme.of(
-                  context,
-                ).textTheme.labelLarge?.copyWith(color: fg),
+                style: Theme.of(context).textTheme.labelLarge
+                    ?.copyWith(color: fg),
               ),
             ],
           ),
@@ -357,9 +356,8 @@ class _EmptyBoard extends StatelessWidget {
                 Text(
                   'Every tool gets a home. Add the first one.',
                   textAlign: TextAlign.center,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(color: muted),
+                  style: Theme.of(context).textTheme.bodyMedium
+                      ?.copyWith(color: muted),
                 ),
                 const SizedBox(height: 16),
                 FilledButton.icon(
@@ -395,9 +393,8 @@ class _NoMatches extends StatelessWidget {
             Text(
               'No tools match "$query"',
               textAlign: TextAlign.center,
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: muted),
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(color: muted),
             ),
           ],
         ),
@@ -572,9 +569,8 @@ class _ItemEditorSheetState extends State<_ItemEditorSheet> {
               const SizedBox(height: 16),
               Text(
                 'Status',
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: PitPalette.inkMutedOf(context),
-                ),
+                style: Theme.of(context).textTheme.labelLarge
+                    ?.copyWith(color: PitPalette.inkMutedOf(context)),
               ),
               const SizedBox(height: 8),
               SegmentedButton<InventoryStatus>(

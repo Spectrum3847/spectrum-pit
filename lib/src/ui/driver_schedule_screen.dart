@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 
@@ -6,6 +8,7 @@ import '../models/user_profile.dart';
 import '../models/user_role.dart';
 import '../services/driver_schedule_generator.dart';
 import '../services/driver_schedule_import.dart';
+import '../services/driver_schedule_store.dart';
 import '../state/pit_shift_controller.dart';
 import '../theme/app_theme.dart';
 import '../theme/pit_palette.dart';
@@ -18,6 +21,7 @@ class DriverScheduleScreen extends StatefulWidget {
     this.rosterStream,
     this.shiftController,
     this.competition,
+    this.store,
   });
 
   final DriverScheduleGenerator? generator;
@@ -30,6 +34,8 @@ class DriverScheduleScreen extends StatefulWidget {
 
   final String? competition;
 
+  final DriverScheduleStore? store;
+
   @override
   State<DriverScheduleScreen> createState() => _DriverScheduleScreenState();
 }
@@ -37,6 +43,13 @@ class DriverScheduleScreen extends StatefulWidget {
 class _DriverScheduleScreenState extends State<DriverScheduleScreen> {
   late final DriverScheduleGenerator _generator =
       widget.generator ?? DriverScheduleGenerator();
+  late final DriverScheduleStore _store = widget.store ?? DriverScheduleStore();
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_restore());
+  }
 
   final Map<String, TextEditingController> _nameControllers = {};
   final TextEditingController _slotsController = TextEditingController(
@@ -92,14 +105,71 @@ class _DriverScheduleScreenState extends State<DriverScheduleScreen> {
       for (final input in config.inputs)
         input.key: parseNameList(_controllerFor(input.key).text),
     };
+    final slots = int.parse(_slotsController.text.trim());
+    final schedule = _generator.generate(
+      config,
+      inputs,
+      slots: slots,
+      handoff: _handoff,
+    );
     setState(() {
       _slotsError = null;
-      _schedule = _generator.generate(
-        config,
-        inputs,
-        slots: int.parse(_slotsController.text.trim()),
-        handoff: _handoff,
-      );
+      _schedule = schedule;
+    });
+    _remember(schedule, inputs);
+  }
+
+  void _remember(DriverSchedule schedule, Map<String, List<String>> inputs) {
+    final competition = widget.competition;
+    if (competition == null || competition.isEmpty) {
+      return;
+    }
+    unawaited(
+      _store
+          .save(
+            competition,
+            SavedDriverSchedule(
+              mode: schedule.config.label,
+              slots: schedule.slots,
+              handoff: schedule.handoff,
+              inputs: inputs,
+              grid: {
+                for (final role in schedule.config.roleKeys)
+                  role: [
+                    for (var slot = 0; slot < schedule.slots; slot++)
+                      schedule.nameAt(role, slot),
+                  ],
+              },
+              updatedAt: DateTime.now().toUtc(),
+            ),
+          )
+          .catchError((Object _) {}),
+    );
+  }
+
+  Future<void> _restore() async {
+    final competition = widget.competition;
+    if (competition == null || competition.isEmpty) {
+      return;
+    }
+    final saved = await _store.load(competition);
+    if (saved == null || !mounted) {
+      return;
+    }
+    final index = scheduleConfigs.indexWhere((c) => c.label == saved.mode);
+    setState(() {
+      if (index != -1) {
+        _modeIndex = index;
+      }
+      _handoff = saved.handoff;
+      if (saved.slots > 0) {
+        _slotsController.text = '${saved.slots}';
+      }
+      for (final entry in saved.inputs.entries) {
+        _controllerFor(entry.key).text = entry.value.join('\n');
+      }
+
+      _schedule = saved.toSchedule();
     });
   }
 
@@ -118,9 +188,8 @@ class _DriverScheduleScreenState extends State<DriverScheduleScreen> {
             'Generate a balanced match rotation. Repeat a name to give that '
             'person a bigger share; names listed first pick up any spare '
             'turns.',
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(color: muted),
+            style: Theme.of(context).textTheme.bodyMedium
+                ?.copyWith(color: muted),
           ),
           const SizedBox(height: 16),
           SegmentedButton<int>(
@@ -174,9 +243,8 @@ class _DriverScheduleScreenState extends State<DriverScheduleScreen> {
             title: const Text('Next driver operates first'),
             subtitle: Text(
               'Each match is operated by whoever drives the match after it.',
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: muted),
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: muted),
             ),
           ),
           const SizedBox(height: 20),
@@ -239,20 +307,19 @@ class _DriverScheduleScreenState extends State<DriverScheduleScreen> {
 
     setState(() => _importing = true);
     try {
-      if (replace) {
-        for (final stale in previous) {
-          await controller.delete(stale.id);
-        }
-      }
-      for (final shift in shifts) {
-        await controller.upsert(shift);
-      }
-      final unlinked = shifts.where((s) => s.hasUnlinkedAssignees).length;
+      await DriverScheduleImport.commit(
+        shifts: shifts,
+        previous: previous,
+        replace: replace,
+        upsert: controller.upsert,
+        delete: controller.delete,
+      );
       _say(
-        replace
-            ? 'Replaced the previous import with ${shifts.length} shifts.'
-            : 'Added ${shifts.length} shifts to $competition.'
-                  '${unlinked == 0 ? '' : ' $unlinked have someone with no account.'}',
+        DriverScheduleImport.summaryOf(
+          shifts,
+          competition: competition,
+          replace: replace,
+        ),
       );
     } catch (error) {
       _say('Import failed: $error');
@@ -288,9 +355,8 @@ class _DriverScheduleScreenState extends State<DriverScheduleScreen> {
 
   void _say(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _openPeoplePicker(ScheduleInput input) {
@@ -298,6 +364,8 @@ class _DriverScheduleScreenState extends State<DriverScheduleScreen> {
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+
+      showDragHandle: true,
       builder: (sheetContext) => _PeoplePickerSheet(
         title: input.label,
         known: widget.knownPeople,
@@ -460,9 +528,8 @@ class _NoNamesYet extends StatelessWidget {
         Expanded(
           child: Text(
             'Add at least one person to a role above, then generate.',
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(color: muted),
+            style: Theme.of(context).textTheme.bodyMedium
+                ?.copyWith(color: muted),
           ),
         ),
       ],
@@ -605,13 +672,24 @@ class _PeoplePickerSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final stream = rosterStream;
-    if (stream == null) return _body(context, const [], rosterFailed: false);
+    if (stream == null) {
+      return _body(
+        context,
+        const [],
+        rosterFailed: false,
+        rosterLoading: false,
+      );
+    }
     return StreamBuilder<List<UserProfile>>(
       stream: stream,
       builder: (context, snapshot) => _body(
         context,
         snapshot.data ?? const <UserProfile>[],
         rosterFailed: snapshot.hasError,
+
+        rosterLoading:
+            snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasError,
       ),
     );
   }
@@ -620,6 +698,7 @@ class _PeoplePickerSheet extends StatelessWidget {
     BuildContext context,
     List<UserProfile> roster, {
     required bool rosterFailed,
+    required bool rosterLoading,
   }) {
     final muted = PitPalette.inkMutedOf(context);
 
@@ -643,20 +722,20 @@ class _PeoplePickerSheet extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              byName.isEmpty
-                  ? 'Nobody to offer yet. Type the names instead.'
-                  : 'Tap a name to add it. Tap it twice for two turns.',
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: muted),
+              byName.isNotEmpty
+                  ? 'Tap a name to add it. Tap it twice for two turns.'
+                  : rosterLoading
+                  ? 'Looking for people.'
+                  : 'Nobody to offer yet. Type the names instead.',
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: muted),
             ),
             if (rosterFailed) ...[
               const SizedBox(height: 4),
               Text(
                 'Only people already on the schedule are listed.',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: muted),
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(color: muted),
               ),
             ],
             const SizedBox(height: 12),
@@ -807,9 +886,8 @@ class _Legend extends StatelessWidget {
                 Expanded(
                   child: Text(
                     warning,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodySmall?.copyWith(color: muted),
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: muted),
                   ),
                 ),
               ],
@@ -938,9 +1016,8 @@ class _AttendanceSection extends StatelessWidget {
                           child: count == null
                               ? Text(
                                   'not listed',
-                                  style: Theme.of(
-                                    context,
-                                  ).textTheme.bodySmall?.copyWith(color: muted),
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(color: muted),
                                 )
                               : Text(
                                   '$count',
@@ -1034,9 +1111,8 @@ class _ImportAction extends StatelessWidget {
         Text(
           'One match block per match, so a person double-booked against a pit '
           'duty shows up as a conflict like any other clash.',
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: PitPalette.inkMutedOf(context),
-          ),
+          style: Theme.of(context).textTheme.bodySmall
+              ?.copyWith(color: PitPalette.inkMutedOf(context)),
         ),
       ],
     );

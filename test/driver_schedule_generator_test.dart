@@ -99,9 +99,8 @@ void main() {
       };
 
       final elapsed = Stopwatch()..start();
-      final schedule = DriverScheduleGenerator(
-        random: Random(11),
-      ).generate(config, inputs, slots: maxScheduleSlots, handoff: true);
+      final schedule = DriverScheduleGenerator(random: Random(11))
+          .generate(config, inputs, slots: maxScheduleSlots, handoff: true);
       elapsed.stop();
 
       expect(elapsed.elapsed, lessThan(const Duration(seconds: 2)));

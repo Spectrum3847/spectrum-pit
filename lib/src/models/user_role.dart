@@ -44,6 +44,8 @@ abstract final class AppTabs {
   static const int docs = 5;
   static const int users = 6;
   static const int settings = 7;
+
+  static const int usage = 8;
 }
 
 extension UserRoleSetPermissions on Set<UserRole> {
@@ -54,6 +56,16 @@ extension UserRoleSetPermissions on Set<UserRole> {
         case UserRole.viewer:
           break;
         case UserRole.pit:
+          tabs.addAll(const [
+            AppTabs.inventory,
+            AppTabs.packing,
+            AppTabs.borrowed,
+            AppTabs.maps,
+            AppTabs.schedule,
+            AppTabs.docs,
+            AppTabs.settings,
+          ]);
+
         case UserRole.developer:
           tabs.addAll(const [
             AppTabs.inventory,
@@ -63,6 +75,7 @@ extension UserRoleSetPermissions on Set<UserRole> {
             AppTabs.schedule,
             AppTabs.docs,
             AppTabs.settings,
+            AppTabs.usage,
           ]);
         case UserRole.admin:
           tabs.addAll(const [

@@ -177,6 +177,8 @@ class _MapsTabState extends State<MapsTab> {
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+
+      showDragHandle: true,
       builder: (sheetContext) => _MapPinEditorSheet(
         pin: pin,
         mapType: _mapType,
@@ -204,6 +206,8 @@ class _MapsTabState extends State<MapsTab> {
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+
+      showDragHandle: true,
       builder: (sheetContext) => _PinDetailSheet(
         pin: pin,
         linkedItem: linked,
@@ -252,9 +256,8 @@ class _MapsTabState extends State<MapsTab> {
 
   void _showSyncError(String action, Object error) {
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('Could not $action: $error')));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('Could not $action: $error')));
   }
 
   @override
@@ -521,9 +524,8 @@ class _EmptyMap extends StatelessWidget {
                       : 'Diagram selection is not supported in the browser '
                             'preview.',
                   textAlign: TextAlign.center,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(color: muted),
+                  style: Theme.of(context).textTheme.bodyMedium
+                      ?.copyWith(color: muted),
                 ),
                 if (supported) ...[
                   const SizedBox(height: 16),
@@ -622,9 +624,8 @@ class _PinDetailSheet extends StatelessWidget {
           if (item == null)
             Text(
               'No tool linked to this pin.',
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: muted),
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(color: muted),
             )
           else ...[
             Text(item.name, style: Theme.of(context).textTheme.bodyLarge),

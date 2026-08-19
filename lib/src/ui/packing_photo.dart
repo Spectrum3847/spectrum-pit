@@ -289,9 +289,8 @@ class _PhotoMessage extends StatelessWidget {
               Text(
                 body,
                 textAlign: TextAlign.center,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(color: muted),
+                style: Theme.of(context).textTheme.bodyMedium
+                    ?.copyWith(color: muted),
               ),
               if (onRetry != null) ...[
                 const SizedBox(height: 16),

@@ -4,8 +4,7 @@ import '../models/map_location.dart';
 import 'map_diagram_sync_service.dart';
 
 class DesktopMapDiagramSyncService implements MapDiagramSyncService {
-  DesktopMapDiagramSyncService({required fc.Firestore firestore})
-    : _firestore = firestore;
+  DesktopMapDiagramSyncService({required this._firestore});
 
   final fc.Firestore _firestore;
 

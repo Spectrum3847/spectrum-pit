@@ -84,6 +84,7 @@ scripts/sheets-export-cron/node_modules/
 .claude/worktrees/
 scripts/promotion-cron/node_modules/
 scripts/report-cron/node_modules/
+scripts/usage-cron/node_modules/
 
 # mimocode agent-tooling state (never ship or track; see #533)
 .mimocode/

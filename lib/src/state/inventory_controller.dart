@@ -9,11 +9,7 @@ import 'pit_controller_mixin.dart';
 
 class InventoryController extends ChangeNotifier
     with PitControllerMixin<InventoryItem> {
-  InventoryController({
-    required SpectrumAuthService authService,
-    required InventorySyncService syncService,
-  }) : _authService = authService,
-       _syncService = syncService;
+  InventoryController({required this._authService, required this._syncService});
 
   static const String _cacheKey = 'pit_inventory_cache';
 

@@ -9,11 +9,7 @@ import 'pit_controller_mixin.dart';
 
 class PitShiftController extends ChangeNotifier
     with PitControllerMixin<PitShift> {
-  PitShiftController({
-    required SpectrumAuthService authService,
-    required PitShiftSyncService syncService,
-  }) : _authService = authService,
-       _syncService = syncService;
+  PitShiftController({required this._authService, required this._syncService});
 
   static const String _cacheKey = 'pit_shifts_cache';
 

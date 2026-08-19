@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:firestore_client/firestore_client.dart' as fc;
 import 'package:flutter/foundation.dart' show debugPrint;
+
 import 'desktop_polling.dart';
 
 import '../models/inventory_item.dart';
@@ -9,12 +10,10 @@ import 'inventory_sync_service.dart';
 
 class DesktopInventorySyncService implements InventorySyncService {
   DesktopInventorySyncService({
-    required fc.Firestore firestore,
-    Duration pollInterval = const Duration(seconds: 30),
-    void Function(Object error)? onPollError,
-  }) : _firestore = firestore,
-       _pollInterval = pollInterval,
-       _onPollError = onPollError;
+    required this._firestore,
+    this._pollInterval = const Duration(seconds: 30),
+    this._onPollError,
+  });
 
   final fc.Firestore _firestore;
   final Duration _pollInterval;

@@ -4,13 +4,11 @@ import 'package:spectrumpit/src/services/map_diagram_sync_service.dart';
 class FakeMapDiagramSyncService implements MapDiagramSyncService {
   FakeMapDiagramSyncService({
     String? readKeyValue,
-    Object? readFailure,
-    Object? writeFailure,
-    Object? clearFailure,
+    this._readFailure,
+    this._writeFailure,
+    this._clearFailure,
     this.onWriteKey,
-  }) : _readFailure = readFailure,
-       _writeFailure = writeFailure,
-       _clearFailure = clearFailure {
+  }) {
     if (readKeyValue != null) {
       for (final mapType in MapType.values) {
         _readKeyValues[mapType] = readKeyValue;

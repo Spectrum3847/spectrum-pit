@@ -72,9 +72,8 @@ void main() {
     });
 
     test('a rotation nobody is in imports as nothing', () {
-      final empty = DriverScheduleGenerator(
-        random: Random(7),
-      ).generate(singleRobotConfig, const {}, slots: 4, handoff: false);
+      final empty = DriverScheduleGenerator(random: Random(7))
+          .generate(singleRobotConfig, const {}, slots: 4, handoff: false);
 
       expect(_import(empty), isEmpty);
     });
@@ -203,6 +202,139 @@ void main() {
         DriverScheduleImport.previousImports(const <PitShift>[], 'Houston'),
         isEmpty,
       );
+    });
+  });
+
+  group('committing a replace', () {
+    test('writes every new shift before deleting any old one', () async {
+      final previous = _import(
+        _schedule(singleRobotConfig, slots: 2),
+        idPrefix: 'drv-old',
+      );
+      final shifts = _import(
+        _schedule(singleRobotConfig, slots: 2),
+        idPrefix: 'drv-new',
+      );
+      final log = <String>[];
+
+      await DriverScheduleImport.commit(
+        shifts: shifts,
+        previous: previous,
+        replace: true,
+        upsert: (shift) async => log.add('upsert ${shift.id}'),
+        delete: (id) async => log.add('delete $id'),
+      );
+
+      expect(log, hasLength(shifts.length + previous.length));
+      final firstDelete = log.indexWhere((e) => e.startsWith('delete'));
+      final lastUpsert = log.lastIndexWhere((e) => e.startsWith('upsert'));
+      expect(lastUpsert, lessThan(firstDelete));
+    });
+
+    test('leaves the previous rotation alone when a write fails', () async {
+      final previous = _import(
+        _schedule(singleRobotConfig, slots: 3),
+        idPrefix: 'drv-old',
+      );
+      final shifts = _import(
+        _schedule(singleRobotConfig, slots: 3),
+        idPrefix: 'drv-new',
+      );
+      final deleted = <String>[];
+      var writes = 0;
+
+      await expectLater(
+        DriverScheduleImport.commit(
+          shifts: shifts,
+          previous: previous,
+          replace: true,
+          upsert: (shift) async {
+            writes++;
+
+            if (writes == 2) throw StateError('connection dropped');
+          },
+          delete: (id) async => deleted.add(id),
+        ),
+        throwsStateError,
+      );
+
+      expect(deleted, isEmpty);
+    });
+
+    test('deletes nothing when adding alongside', () async {
+      final previous = _import(
+        _schedule(singleRobotConfig, slots: 2),
+        idPrefix: 'drv-old',
+      );
+      final deleted = <String>[];
+
+      await DriverScheduleImport.commit(
+        shifts: _import(
+          _schedule(singleRobotConfig, slots: 2),
+          idPrefix: 'drv-new',
+        ),
+        previous: previous,
+        replace: false,
+        upsert: (shift) async {},
+        delete: (id) async => deleted.add(id),
+      );
+
+      expect(deleted, isEmpty);
+    });
+  });
+
+  group('what the reader is told', () {
+    test('tells the reader about unlinked people after a replace too', () {
+      final shifts = _import(_schedule(singleRobotConfig, slots: 2));
+      expect(shifts.any((s) => s.hasUnlinkedAssignees), isTrue);
+
+      final replaced = DriverScheduleImport.summaryOf(
+        shifts,
+        competition: 'Houston',
+        replace: true,
+      );
+      final added = DriverScheduleImport.summaryOf(
+        shifts,
+        competition: 'Houston',
+        replace: false,
+      );
+
+      expect(replaced, contains('someone with no account'));
+      expect(added, contains('someone with no account'));
+    });
+
+    test('says nothing about unlinked people when everyone is linked', () {
+      final schedule = _schedule(singleRobotConfig, slots: 1);
+      final shifts = _import(
+        schedule,
+        uidByName: {
+          for (final name in schedule.namesInSlot(0)) name: 'uid-$name',
+        },
+      );
+
+      expect(
+        DriverScheduleImport.summaryOf(
+          shifts,
+          competition: 'Houston',
+          replace: true,
+        ),
+        isNot(contains('account')),
+      );
+    });
+
+    test('one shift does not read as "1 shifts"', () {
+      final shifts = _import(_schedule(singleRobotConfig, slots: 1));
+      expect(shifts, hasLength(1));
+
+      for (final replace in [true, false]) {
+        final message = DriverScheduleImport.summaryOf(
+          shifts,
+          competition: 'Houston',
+          replace: replace,
+        );
+        expect(message, contains('1 shift'));
+        expect(message, isNot(contains('1 shifts')));
+      }
     });
   });
 }

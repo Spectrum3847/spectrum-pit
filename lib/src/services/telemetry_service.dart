@@ -8,13 +8,11 @@ import 'debug_info.dart';
 
 class TelemetryService {
   TelemetryService({
-    FirebaseFirestore? firestore,
-    Future<void> Function(String docPath, Map<String, dynamic> data)? write,
+    this._firestore,
+    this._write,
     Future<SharedPreferences> Function()? prefs,
     Future<DebugInfo> Function()? debugInfo,
-  }) : _firestore = firestore,
-       _write = write,
-       _prefsLoader = prefs ?? SharedPreferences.getInstance,
+  }) : _prefsLoader = prefs ?? SharedPreferences.getInstance,
        _debugInfoLoader = debugInfo ?? DebugInfo.gather;
 
   static const String enabledKey = 'telemetry_enabled';

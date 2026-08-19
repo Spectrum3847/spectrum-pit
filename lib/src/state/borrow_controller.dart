@@ -9,11 +9,7 @@ import 'pit_controller_mixin.dart';
 
 class BorrowController extends ChangeNotifier
     with PitControllerMixin<BorrowRecord> {
-  BorrowController({
-    required SpectrumAuthService authService,
-    required BorrowSyncService syncService,
-  }) : _authService = authService,
-       _syncService = syncService;
+  BorrowController({required this._authService, required this._syncService});
 
   static const String _cacheKey = 'pit_borrow_cache';
 

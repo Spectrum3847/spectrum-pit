@@ -73,9 +73,8 @@ void main() {
 
       final dir = Directory('${base.path}/photos');
       await File('${dir.path}/old').setLastModified(DateTime.now());
-      await File(
-        '${dir.path}/newer',
-      ).setLastModified(DateTime.now().subtract(const Duration(hours: 1)));
+      await File('${dir.path}/newer')
+          .setLastModified(DateTime.now().subtract(const Duration(hours: 1)));
 
       await cache.write('pushes-over', bytes(400));
 

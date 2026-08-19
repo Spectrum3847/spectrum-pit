@@ -130,9 +130,8 @@ class _UserProfileTileState extends State<_UserProfileTile> {
       if (mounted) setState(() => _expanded = false);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to save roles: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Failed to save roles: $e')));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -167,9 +166,8 @@ class _UserProfileTileState extends State<_UserProfileTile> {
                 if (widget.isOwnProfile)
                   Text(
                     'You cannot edit your own roles.',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      fontStyle: FontStyle.italic,
-                    ),
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(fontStyle: FontStyle.italic),
                   ),
               ],
             ),

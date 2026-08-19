@@ -52,8 +52,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '883337539000',
     projectId: 'spectrumpit',
     storageBucket: 'spectrumpit.firebasestorage.app',
-    iosClientId:
-        '883337539000-vhmpbs3ue69k5bnh627ajvicv1v3mfrn.apps.googleusercontent.com',
+    iosClientId: '883337539000-vhmpbs3ue69k5bnh627ajvicv1v3mfrn.apps.googleusercontent.com',
     iosBundleId: 'org.spectrum3847.spectrumpit',
   );
 
@@ -63,8 +62,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '883337539000',
     projectId: 'spectrumpit',
     storageBucket: 'spectrumpit.firebasestorage.app',
-    iosClientId:
-        '883337539000-vhmpbs3ue69k5bnh627ajvicv1v3mfrn.apps.googleusercontent.com',
+    iosClientId: '883337539000-vhmpbs3ue69k5bnh627ajvicv1v3mfrn.apps.googleusercontent.com',
     iosBundleId: 'org.spectrum3847.spectrumpit',
   );
 

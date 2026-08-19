@@ -46,9 +46,8 @@ void main() {
       final appDir = Directory.systemTemp.createTempSync('launcher-appdir');
       addTearDown(() => home.deleteSync(recursive: true));
       addTearDown(() => appDir.deleteSync(recursive: true));
-      File(
-        '${appDir.path}/spectrumpit.png',
-      ).writeAsBytesSync(List<int>.filled(200, 0x42));
+      File('${appDir.path}/spectrumpit.png')
+          .writeAsBytesSync(List<int>.filled(200, 0x42));
       final service = DesktopLauncherService(
         appImagePathLoader: () => '/tmp/App.AppImage',
         appDirLoader: () => appDir.path,

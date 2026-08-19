@@ -113,6 +113,11 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    match /telemetryRollup/{docId} {
+      allow read: if isAuthed() && isDeveloper();
+      allow write: if false;
+    }
+
     function isAuthed() {
       return request.auth != null;
     }

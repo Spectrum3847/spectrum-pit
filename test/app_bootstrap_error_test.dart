@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:spectrumpit/src/app.dart';
+
 import 'support/fake_borrow_sync_service.dart';
 import 'support/fake_container_photo_sync_service.dart';
 import 'support/fake_inventory_sync_service.dart';
@@ -11,6 +12,7 @@ import 'support/fake_map_location_sync_service.dart';
 import 'support/fake_packing_sync_service.dart';
 import 'support/photo_test_support.dart';
 import 'support/fake_pit_shift_sync_service.dart';
+
 import 'package:spectrumpit/src/state/borrow_controller.dart';
 import 'package:spectrumpit/src/state/inventory_controller.dart';
 import 'package:spectrumpit/src/state/map_location_controller.dart';

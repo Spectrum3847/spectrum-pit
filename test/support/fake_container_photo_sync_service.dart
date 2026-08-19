@@ -3,15 +3,12 @@ import 'package:spectrumpit/src/services/container_photo_sync_service.dart';
 class FakeContainerPhotoSyncService implements ContainerPhotoSyncService {
   FakeContainerPhotoSyncService({
     Map<String, String?> seed = const <String, String?>{},
-    Object? readFailure,
-    Object? writeFailure,
-    Object? clearFailure,
+    this._readFailure,
+    this._writeFailure,
+    this._clearFailure,
     this.onWriteKey,
     this.onReadKey,
-  }) : _readKeyValues = {...seed},
-       _readFailure = readFailure,
-       _writeFailure = writeFailure,
-       _clearFailure = clearFailure;
+  }) : _readKeyValues = {...seed};
 
   final Map<String, String?> _readKeyValues;
   final Object? _readFailure;
