@@ -1,9 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Packing photos (#63). image_picker needs no manifest entries of its
-         own, but when CAMERA is declared it asks for it at runtime before
-         launching the capture intent, so the declaration and the runtime
-         prompt have to stay together. Reading the photo library needs no
-         permission on the API levels this app supports. -->
+    <!-- image_picker needs no manifest entries of its own, but when CAMERA is
+         declared it asks for it at runtime before launching the capture
+         intent, so the declaration and the runtime prompt have to stay
+         together. Reading the photo library needs no permission on the API
+         levels this app supports. -->
     <uses-permission android:name="android.permission.CAMERA" />
     <!-- Required so release builds always have network access; Flutter's debug
          and profile manifests add INTERNET themselves, but a release build must

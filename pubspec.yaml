@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.6.0+9
+version: 1.7.0+10
 
 environment:
   sdk: ^3.13.0
@@ -38,8 +38,8 @@ dependencies:
   google_sign_in: ^7.2.0
   http: ^1.2.2
   # Our own pure-Dart Firebase Auth + Firestore REST client, extracted from
-  # this app's desktop services and published for the ecosystem (#498). Gives
-  # Linux (which FlutterFire does not support) real sign-in and cloud access.
+  # this app's desktop services and published for the ecosystem. Gives Linux
+  # (which FlutterFire does not support) real sign-in and cloud access.
   firestore_client:
     git:
       url: https://github.com/Project516/firestore_client.git
@@ -50,14 +50,14 @@ dependencies:
   device_info_plus: ^13.2.0
   flutter_markdown_plus: ^1.0.12
   url_launcher: ^6.3.1
-  # Diagram picking for the maps tab (#9): file_selector over image_picker
-  # since desktop is a ship target and image_picker's desktop support is
-  # weak. path_provider locates the per-device app support dir the picked
-  # image is copied into.
+  # Diagram picking for the maps tab: file_selector over image_picker since
+  # desktop is a ship target and image_picker's desktop support is weak.
+  # path_provider locates the per-device app support dir the picked image is
+  # copied into.
   file_selector: ^1.0.3
   path_provider: ^2.1.6
-  # Packing photo capture (#63) forks the other way: mobile needs a camera,
-  # which file_selector has no answer for, and image_picker's
+  # Packing photo capture forks the other way: mobile needs a camera, which
+  # file_selector has no answer for, and image_picker's
   # maxWidth/maxHeight/imageQuality do the downscale and re-encode natively, so
   # a phone photo lands under the Worker's 2 MB cap with no image-processing
   # dependency. Desktop and web stay on file_selector, since neither has a

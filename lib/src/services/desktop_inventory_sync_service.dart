@@ -28,7 +28,10 @@ class DesktopInventorySyncService implements InventorySyncService {
 
   @override
   Future<void> upsert(InventoryItem item) async {
-    await _firestore.setDocument('inventoryItems/${item.id}', item.toJson());
+    await _firestore.setDocument('inventoryItems/${item.id}', {
+      ...item.toJson(),
+      'updatedAtTs': item.updatedAt.toUtc(),
+    });
   }
 
   @override

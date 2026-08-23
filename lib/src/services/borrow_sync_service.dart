@@ -42,8 +42,11 @@ class FirestoreBorrowSyncService implements BorrowSyncService {
   }
 
   @override
-  Future<void> upsert(BorrowRecord record) =>
-      _collection.doc(record.id).set(record.toJson());
+  Future<void> upsert(BorrowRecord record) => _collection.doc(record.id).set({
+    ...record.toJson(),
+
+    'updatedAtTs': FieldValue.serverTimestamp(),
+  });
 
   @override
   Future<void> delete(String id) => _collection.doc(id).delete();

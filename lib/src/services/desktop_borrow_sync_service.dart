@@ -28,7 +28,10 @@ class DesktopBorrowSyncService implements BorrowSyncService {
 
   @override
   Future<void> upsert(BorrowRecord record) async {
-    await _firestore.setDocument('borrowRecords/${record.id}', record.toJson());
+    await _firestore.setDocument('borrowRecords/${record.id}', {
+      ...record.toJson(),
+      'updatedAtTs': record.updatedAt.toUtc(),
+    });
   }
 
   @override

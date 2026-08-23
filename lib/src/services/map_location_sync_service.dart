@@ -39,8 +39,9 @@ class FirestoreMapLocationSyncService implements MapLocationSyncService {
   }
 
   @override
-  Future<void> upsert(MapLocation location) =>
-      _collection.doc(location.id).set(location.toJson());
+  Future<void> upsert(MapLocation location) => _collection.doc(location.id).set(
+    {...location.toJson(), 'updatedAtTs': FieldValue.serverTimestamp()},
+  );
 
   @override
   Future<void> delete(String id) => _collection.doc(id).delete();

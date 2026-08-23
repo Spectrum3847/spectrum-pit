@@ -258,7 +258,35 @@ void main() {
         throwsStateError,
       );
 
-      expect(deleted, isEmpty);
+      expect(deleted, [shifts.first.id]);
+    });
+
+    test('a failed rollback still reports the original failure', () async {
+      final shifts = _import(
+        _schedule(singleRobotConfig, slots: 3),
+        idPrefix: 'drv-new',
+      );
+      var writes = 0;
+
+      await expectLater(
+        DriverScheduleImport.commit(
+          shifts: shifts,
+          previous: const [],
+          replace: true,
+          upsert: (shift) async {
+            writes++;
+            if (writes == 2) throw StateError('connection dropped');
+          },
+          delete: (id) async => throw StateError('still offline'),
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            'connection dropped',
+          ),
+        ),
+      );
     });
 
     test('deletes nothing when adding alongside', () async {

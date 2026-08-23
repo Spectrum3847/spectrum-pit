@@ -21,12 +21,25 @@ void main() {
     );
   });
 
-  test('cancelled-popup-request falls back to redirect', () {
+  test('cancelled-popup-request is a superseded attempt, not a failure', () {
+    expect(
+      isSupersededPopupAuthError(
+        FirebaseAuthException(code: 'cancelled-popup-request'),
+      ),
+      isTrue,
+    );
+    expect(
+      isSupersededPopupAuthError(FirebaseAuthException(code: 'popup-blocked')),
+      isFalse,
+    );
+  });
+
+  test('cancelled-popup-request does not fall back to redirect', () {
     expect(
       isPopupBlockedAuthError(
         FirebaseAuthException(code: 'cancelled-popup-request'),
       ),
-      isTrue,
+      isFalse,
     );
   });
 

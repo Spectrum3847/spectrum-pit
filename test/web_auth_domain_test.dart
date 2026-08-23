@@ -40,6 +40,14 @@ void main() {
     expect(result.authDomain, 'spectrumpit-staging.firebaseapp.com');
   });
 
+  test('overrides authDomain for the fixed preview site host', () {
+    final result = webFirebaseOptionsForHost(
+      'spectrumpit-preview.web.app',
+      defaults,
+    );
+    expect(result.authDomain, 'spectrumpit-preview.web.app');
+  });
+
   test('leaves authDomain alone for a hosting preview channel host', () {
     final result = webFirebaseOptionsForHost(
       'spectrumpit--pr-321-324-xv3713mi.web.app',

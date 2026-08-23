@@ -43,8 +43,11 @@ class FirestorePitShiftSyncService implements PitShiftSyncService {
   }
 
   @override
-  Future<void> upsert(PitShift shift) =>
-      _collection.doc(shift.id).set(shift.toJson());
+  Future<void> upsert(PitShift shift) => _collection.doc(shift.id).set({
+    ...shift.toJson(),
+
+    'updatedAtTs': FieldValue.serverTimestamp(),
+  });
 
   @override
   Future<void> delete(String id) => _collection.doc(id).delete();

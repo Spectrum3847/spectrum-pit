@@ -87,6 +87,7 @@ class _Report extends StatelessWidget {
     final muted = PitPalette.inkMutedOf(context);
 
     return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
       children: [
         Row(
@@ -198,7 +199,9 @@ class _BarSection extends StatelessWidget {
     final theme = Theme.of(context);
     final muted = PitPalette.inkMutedOf(context);
 
-    final top = counts.first.count;
+    final ranked = [...counts]..sort((a, b) => b.count.compareTo(a.count));
+
+    final top = ranked.first.count;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 24),
@@ -214,10 +217,10 @@ class _BarSection extends StatelessWidget {
           const SizedBox(height: 2),
           Text(note, style: theme.textTheme.bodySmall?.copyWith(color: muted)),
           const SizedBox(height: 10),
-          for (var i = 0; i < counts.length; i++)
+          for (var i = 0; i < ranked.length; i++)
             _Bar(
-              count: counts[i],
-              fraction: top <= 0 ? 0 : counts[i].count / top,
+              count: ranked[i],
+              fraction: top <= 0 ? 0 : ranked[i].count / top,
 
               leading: i == 0,
             ),

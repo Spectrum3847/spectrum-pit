@@ -37,6 +37,8 @@ class FirestoreMapDiagramSyncService implements MapDiagramSyncService {
     await _firestore.collection(_collection).doc(mapType.name).set({
       'diagramKey': key,
       'updatedAt': DateTime.now().toUtc().toIso8601String(),
+
+      'updatedAtTs': FieldValue.serverTimestamp(),
     });
   }
 

@@ -42,8 +42,11 @@ class FirestoreInventorySyncService implements InventorySyncService {
   }
 
   @override
-  Future<void> upsert(InventoryItem item) =>
-      _collection.doc(item.id).set(item.toJson());
+  Future<void> upsert(InventoryItem item) => _collection.doc(item.id).set({
+    ...item.toJson(),
+
+    'updatedAtTs': FieldValue.serverTimestamp(),
+  });
 
   @override
   Future<void> delete(String id) => _collection.doc(id).delete();

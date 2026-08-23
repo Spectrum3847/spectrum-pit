@@ -12,22 +12,9 @@ Built with Flutter for iOS, Android, and desktop (Windows, macOS, Linux).
 
 Builds are attached to [this repo's releases](https://github.com/Spectrum3847/spectrum-pit/releases). They are unsigned, so each platform needs a step or two.
 
-### Check the download first
+### Checksums
 
-Every artifact ships with a `.sha256` file next to it. Because these builds are unsigned, the instructions below ask you to click past your platform's own integrity check. A colocated `.sha256` only detects a corrupted download: it comes from the same release, so an attacker who replaces both the artifact and its checksum supplies a matching sum. Detecting tampering needs the expected checksum from a separate trusted channel, or a signed artifact. Download both files into the same folder and run:
-
-```bash
-sha256sum -c App-Name.zip.sha256      # Linux, and Git Bash on Windows
-shasum -a 256 -c App-Name.zip.sha256  # macOS
-```
-
-```powershell
-# Windows PowerShell, if you would rather not install anything
-(Get-FileHash App-Name.zip -Algorithm SHA256).Hash -eq `
-  ((Get-Content App-Name.zip.sha256) -split '\s+')[0].ToUpper()
-```
-
-`OK` (or `True`) means the file is intact. Anything else means download it again, and do not run it.
+Every artifact on a tagged release ships with a `.sha256` file next to it, so you can check that a download arrived intact. Nightly builds do not carry one. The desktop app's built-in updater verifies its own downloads separately, against the checksum GitHub publishes with the release asset.
 
 ### iOS (AltStore, SideStore, LiveContainer)
 

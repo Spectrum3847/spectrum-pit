@@ -42,8 +42,11 @@ class FirestorePackingSyncService implements PackingSyncService {
   }
 
   @override
-  Future<void> upsert(PackingRecord record) =>
-      _collection.doc(record.id).set(record.toJson());
+  Future<void> upsert(PackingRecord record) => _collection.doc(record.id).set({
+    ...record.toJson(),
+
+    'updatedAtTs': FieldValue.serverTimestamp(),
+  });
 
   @override
   Future<void> delete(String id) => _collection.doc(id).delete();

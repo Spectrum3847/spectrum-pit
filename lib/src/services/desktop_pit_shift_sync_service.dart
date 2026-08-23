@@ -33,7 +33,10 @@ class DesktopPitShiftSyncService implements PitShiftSyncService {
 
   @override
   Future<void> upsert(PitShift shift) async {
-    await _firestore.setDocument('pitShifts/${shift.id}', shift.toJson());
+    await _firestore.setDocument('pitShifts/${shift.id}', {
+      ...shift.toJson(),
+      'updatedAtTs': shift.updatedAt.toUtc(),
+    });
   }
 
   @override

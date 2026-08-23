@@ -75,10 +75,38 @@ void main() {
     }
   });
 
+  testWidgets('bars rank by count, whatever order the rollup arrived in', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      _FakeService(
+        _rollup(
+          tabs: const [
+            UsageCount('packing', 3),
+            UsageCount('inventory', 9),
+            UsageCount('maps', 5),
+          ],
+        ),
+      ),
+    );
+
+    final top = tester.getTopLeft(find.text('inventory')).dy;
+    final middle = tester.getTopLeft(find.text('maps')).dy;
+    final bottom = tester.getTopLeft(find.text('packing')).dy;
+    expect(top, lessThan(middle));
+    expect(middle, lessThan(bottom));
+  });
+
   testWidgets('shows how old the numbers are', (tester) async {
     await _pump(tester, _FakeService(_rollup()));
 
-    expect(find.textContaining('2026-08-16'), findsWidgets);
+    final local = DateTime.utc(2026, 8, 16, 6, 25).toLocal();
+    final date =
+        '${local.year}-'
+        '${local.month.toString().padLeft(2, '0')}-'
+        '${local.day.toString().padLeft(2, '0')}';
+    expect(find.textContaining(date), findsWidgets);
     expect(find.textContaining('once a day'), findsOneWidget);
   });
 
