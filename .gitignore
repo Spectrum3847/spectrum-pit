@@ -85,6 +85,11 @@ scripts/sheets-export-cron/node_modules/
 scripts/promotion-cron/node_modules/
 scripts/report-cron/node_modules/
 scripts/usage-cron/node_modules/
+# photo-worker was missed when the others were added, so a pnpm install in it
+# left two state files tracked (#404 review).
+scripts/photo-worker/node_modules/
+# MCP server dependencies (lockfile is tracked, modules are not)
+mcp/node_modules/
 
 # mimocode agent-tooling state (never ship or track; see #533)
 .mimocode/

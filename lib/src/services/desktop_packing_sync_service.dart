@@ -34,10 +34,10 @@ class DesktopPackingSyncService implements PackingSyncService {
 
   @override
   Future<void> upsert(PackingRecord record) async {
-    await _firestore.setDocument(
-      'packingRecords/${record.id}',
-      record.toJson(),
-    );
+    await _firestore.setDocument('packingRecords/${record.id}', {
+      ...record.toJson(),
+      'updatedAtTs': record.updatedAt.toUtc(),
+    });
   }
 
   @override

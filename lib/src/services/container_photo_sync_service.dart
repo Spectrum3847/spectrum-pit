@@ -104,7 +104,7 @@ class FirestoreContainerPhotoSyncService
 
   @override
   Future<void> setDoc(String docId, Map<String, Object?> fields) =>
-      _doc(docId).set(fields);
+      _doc(docId).set({...fields, 'updatedAtTs': FieldValue.serverTimestamp()});
 
   @override
   Future<void> deleteDoc(String docId) => _doc(docId).delete();

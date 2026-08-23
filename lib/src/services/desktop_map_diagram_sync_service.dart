@@ -21,9 +21,12 @@ class DesktopMapDiagramSyncService implements MapDiagramSyncService {
 
   @override
   Future<void> writeKey(MapType mapType, String key) async {
+    final now = DateTime.now().toUtc();
     await _firestore.setDocument('$_collection/${mapType.name}', {
       'diagramKey': key,
-      'updatedAt': DateTime.now().toUtc().toIso8601String(),
+      'updatedAt': now.toIso8601String(),
+
+      'updatedAtTs': now,
     });
   }
 

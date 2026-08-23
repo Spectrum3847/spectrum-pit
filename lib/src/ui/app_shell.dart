@@ -71,6 +71,13 @@ class AppShell extends StatefulWidget {
 
 const _kFirstSecondaryTab = AppTabs.docs;
 
+const _kSecondaryMenuOrder = [
+  AppTabs.docs,
+  AppTabs.users,
+  AppTabs.usage,
+  AppTabs.settings,
+];
+
 const _kTabMeta = [
   (
     label: 'Inventory',
@@ -145,8 +152,17 @@ class _AppShellState extends State<AppShell> {
   List<int> get _featureTabIndices =>
       _visibleTabIndices.where((i) => i < _kFirstSecondaryTab).toList();
 
-  List<int> get _secondaryTabIndices =>
-      _visibleTabIndices.where((i) => i >= _kFirstSecondaryTab).toList();
+  List<int> get _secondaryTabIndices {
+    final visible = _visibleTabIndices
+        .where((i) => i >= _kFirstSecondaryTab)
+        .toSet();
+    assert(
+      visible.every(_kSecondaryMenuOrder.contains),
+      'a secondary tab is missing from _kSecondaryMenuOrder and would '
+      'silently drop out of the overflow menu',
+    );
+    return _kSecondaryMenuOrder.where(visible.contains).toList();
+  }
 
   void _clampIndex() {
     final features = _featureTabIndices;

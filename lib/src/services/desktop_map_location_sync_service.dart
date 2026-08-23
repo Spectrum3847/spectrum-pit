@@ -28,10 +28,10 @@ class DesktopMapLocationSyncService implements MapLocationSyncService {
 
   @override
   Future<void> upsert(MapLocation location) async {
-    await _firestore.setDocument(
-      'mapLocations/${location.id}',
-      location.toJson(),
-    );
+    await _firestore.setDocument('mapLocations/${location.id}', {
+      ...location.toJson(),
+      'updatedAtTs': location.updatedAt.toUtc(),
+    });
   }
 
   @override

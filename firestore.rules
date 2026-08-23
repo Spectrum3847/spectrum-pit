@@ -177,8 +177,9 @@ service cloud.firestore {
     }
 
     function isValidProfileUpdate(data) {
+
       return data.keys().hasOnly(['uid', 'displayName', 'email', 'roles',
-              'createdAt'])
+              'createdAt', 'role'])
         && (!('uid' in data) || data.uid == resource.data.uid)
         && (!('createdAt' in data)
             || data.createdAt == resource.data.createdAt)
@@ -196,7 +197,7 @@ service cloud.firestore {
 
     function isValidInventoryItem(data) {
       return data.keys().hasOnly(['name', 'labLocation', 'pitLocation',
-              'mapRef', 'status', 'updatedAt'])
+              'mapRef', 'status', 'updatedAt', 'updatedAtTs'])
         && data.name is string
         && data.name.size() > 0
         && data.name.size() <= 256
@@ -207,12 +208,13 @@ service cloud.firestore {
         && (!('mapRef' in data)
             || (data.mapRef is string && data.mapRef.size() <= 256))
         && data.status in ['inLab', 'inPit', 'borrowed']
-        && isSaneTimestamp(data.updatedAt);
+        && isSaneTimestamp(data.updatedAt)
+        && (!('updatedAtTs' in data) || hasBoundedUpdatedAtTs(data));
     }
 
     function isValidPackingRecord(data) {
       return data.keys().hasOnly(['itemId', 'packingStatus',
-              'photoRef', 'updatedAt'])
+              'photoRef', 'updatedAt', 'updatedAtTs'])
         && data.itemId is string
         && data.itemId.size() > 0
         && data.itemId.size() <= 256
@@ -220,13 +222,15 @@ service cloud.firestore {
               'loading', 'ready']
         && (!('photoRef' in data)
             || (data.photoRef is string && data.photoRef.size() <= 512))
-        && isSaneTimestamp(data.updatedAt);
+        && isSaneTimestamp(data.updatedAt)
+        && (!('updatedAtTs' in data) || hasBoundedUpdatedAtTs(data));
     }
 
     function isValidBorrowRecord(data) {
       return data.keys().hasOnly(['itemId', 'toolName', 'teamName',
               'teamNumber', 'competition', 'contact', 'checkedOutAt',
-              'estimatedReturn', 'checkedInAt', 'returned', 'updatedAt'])
+              'estimatedReturn', 'checkedInAt', 'returned', 'updatedAt',
+              'updatedAtTs'])
         && data.toolName is string
         && data.toolName.size() > 0
         && data.toolName.size() <= 256
@@ -247,12 +251,13 @@ service cloud.firestore {
         && (!('estimatedReturn' in data)
             || isSaneTimestamp(data.estimatedReturn))
         && (!('checkedInAt' in data)
-            || isSaneTimestamp(data.checkedInAt));
+            || isSaneTimestamp(data.checkedInAt))
+        && (!('updatedAtTs' in data) || hasBoundedUpdatedAtTs(data));
     }
 
     function isValidMapLocation(data) {
       return data.keys().hasOnly(['name', 'mapType', 'x', 'y',
-              'inventoryItemId', 'updatedAt'])
+              'inventoryItemId', 'updatedAt', 'updatedAtTs'])
         && data.name is string
         && data.name.size() > 0
         && data.name.size() <= 256
@@ -266,32 +271,37 @@ service cloud.firestore {
         && (!('inventoryItemId' in data)
             || (data.inventoryItemId is string
                 && data.inventoryItemId.size() <= 256))
-        && isSaneTimestamp(data.updatedAt);
+        && isSaneTimestamp(data.updatedAt)
+        && (!('updatedAtTs' in data) || hasBoundedUpdatedAtTs(data));
     }
 
     function isValidMapDiagram(data) {
-      return data.keys().hasOnly(['diagramKey', 'updatedAt'])
+      return data.keys().hasOnly(['diagramKey', 'updatedAt', 'updatedAtTs'])
         && data.diagramKey is string
         && data.diagramKey.size() > 0
         && data.diagramKey.size() <= 512
-        && isSaneTimestamp(data.updatedAt);
+        && isSaneTimestamp(data.updatedAt)
+        && (!('updatedAtTs' in data) || hasBoundedUpdatedAtTs(data));
     }
 
     function isValidContainerPhoto(data) {
-      return data.keys().hasOnly(['location', 'photoRef', 'updatedAt'])
+      return data.keys().hasOnly(['location', 'photoRef', 'updatedAt',
+              'updatedAtTs'])
         && data.location is string
         && data.location.size() > 0
         && data.location.size() <= 256
         && data.photoRef is string
         && data.photoRef.size() > 0
         && data.photoRef.size() <= 512
-        && isSaneTimestamp(data.updatedAt);
+        && isSaneTimestamp(data.updatedAt)
+        && (!('updatedAtTs' in data) || hasBoundedUpdatedAtTs(data));
     }
 
     function isValidPitShift(data) {
       return data.keys().hasOnly(['label', 'kind', 'competition',
               'assignedUids', 'assignedNames', 'startMatch', 'endMatch',
-              'startsAt', 'endsAt', 'notes', 'importedFrom', 'updatedAt'])
+              'startsAt', 'endsAt', 'notes', 'importedFrom', 'updatedAt',
+              'updatedAtTs'])
         && data.label is string
         && data.label.size() <= 256
         && data.kind in ['loadIn', 'matchBlock', 'pitDuty', 'loadOut',
@@ -317,7 +327,8 @@ service cloud.firestore {
 
         && (!('importedFrom' in data)
             || data.importedFrom in ['driver-schedule'])
-        && isSaneTimestamp(data.updatedAt);
+        && isSaneTimestamp(data.updatedAt)
+        && (!('updatedAtTs' in data) || hasBoundedUpdatedAtTs(data));
     }
 
     function isValidBugReport(data) {
@@ -373,6 +384,11 @@ service cloud.firestore {
             || (data.detail is string && data.detail.size() <= 128));
     }
 
+    function hasBoundedUpdatedAtTs(data) {
+      return data.updatedAtTs is timestamp
+        && data.updatedAtTs <= request.time + duration.value(5, 'm');
+    }
+
     function isSaneTimestamp(value) {
       return value is string
         && value.size() >= 20
@@ -382,7 +398,9 @@ service cloud.firestore {
     }
 
     function isMonotonicUpdate(prev, next) {
-      return next.updatedAt >= prev.updatedAt;
+      return ('updatedAtTs' in prev)
+        ? ('updatedAtTs' in next && next.updatedAtTs >= prev.updatedAtTs)
+        : next.updatedAt >= prev.updatedAt;
     }
   }
 }

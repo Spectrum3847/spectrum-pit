@@ -108,8 +108,8 @@ install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
   COMPONENT Runtime)
 
 # Bundle the VC++ Runtime DLLs next to the executable so users do not need
-# the VC++ Redistributable installed (#144). CMake locates the redist for
-# the toolset that built us; the release workflow fails if they are missing.
+# the VC++ Redistributable installed. CMake locates the redist for the
+# toolset that built us; the release workflow fails if they are missing.
 set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION "${INSTALL_BUNDLE_LIB_DIR}")
 set(CMAKE_INSTALL_SYSTEM_RUNTIME_COMPONENT Runtime)
 include(InstallRequiredSystemLibraries)

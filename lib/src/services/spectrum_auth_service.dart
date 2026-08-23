@@ -2,13 +2,13 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, debugPrint, defaultTargetPlatform, kIsWeb;
 import 'package:google_sign_in/google_sign_in.dart';
 
 const Set<String> _popupBlockedAuthCodes = {
   'popup-blocked',
   'popup-blocked-by-user',
-  'cancelled-popup-request',
   'operation-not-supported-in-this-environment',
 };
 
@@ -17,8 +17,19 @@ bool isPopupBlockedAuthError(Object error) {
       _popupBlockedAuthCodes.contains(error.code);
 }
 
+bool isSupersededPopupAuthError(Object error) {
+  return error is FirebaseAuthException &&
+      error.code == 'cancelled-popup-request';
+}
+
 bool isPopupPersistenceAuthError(Object error) {
   return error.toString().contains('Database is closing/hidden');
+}
+
+bool isGoogleSignInTransportError(Object error) {
+  return error is GoogleSignInException &&
+      error.code != GoogleSignInExceptionCode.canceled &&
+      error.code != GoogleSignInExceptionCode.interrupted;
 }
 
 class SpectrumUser {
@@ -108,14 +119,18 @@ class FirebaseSpectrumAuthService implements SpectrumAuthService {
 
     await _authStateSubscription?.cancel();
 
+    Object? redirectError;
     if (kIsWeb) {
       try {
         await _appAuth.getRedirectResult();
-      } catch (_) {}
+      } catch (error) {
+        redirectError = error;
+      }
     }
     _authStateSubscription = _appAuth.authStateChanges().listen((user) {
       if (user == null) {
-        if (_snapshot.state != SpectrumAuthState.signingIn) {
+        if (_snapshot.state != SpectrumAuthState.signingIn &&
+            _snapshot.state != SpectrumAuthState.error) {
           _emit(const SpectrumAuthSnapshot(state: SpectrumAuthState.signedOut));
         }
       } else {
@@ -135,6 +150,13 @@ class FirebaseSpectrumAuthService implements SpectrumAuthService {
           user: _userFrom(existing),
         ),
       );
+    } else if (redirectError != null) {
+      _emit(
+        SpectrumAuthSnapshot(
+          state: SpectrumAuthState.error,
+          error: _friendlyAuthError(redirectError),
+        ),
+      );
     } else {
       _emit(const SpectrumAuthSnapshot(state: SpectrumAuthState.signedOut));
     }
@@ -144,7 +166,7 @@ class FirebaseSpectrumAuthService implements SpectrumAuthService {
   Future<void> signIn() async {
     _emit(const SpectrumAuthSnapshot(state: SpectrumAuthState.signingIn));
     try {
-      final UserCredential result;
+      UserCredential result;
       if (kIsWeb) {
         try {
           result = await _appAuth.signInWithPopup(GoogleAuthProvider());
@@ -159,14 +181,26 @@ class FirebaseSpectrumAuthService implements SpectrumAuthService {
           return;
         }
       } else {
-        final account = await _googleSignIn.authenticate();
-        final auth = account.authentication;
-        final idToken = auth.idToken;
-        if (idToken == null) {
-          throw StateError('Google sign-in returned no ID token.');
+        try {
+          final account = await _googleSignIn.authenticate();
+          final auth = account.authentication;
+          final idToken = auth.idToken;
+          if (idToken == null) {
+            throw StateError('Google sign-in returned no ID token.');
+          }
+          final credential = GoogleAuthProvider.credential(idToken: idToken);
+          result = await _appAuth.signInWithCredential(credential);
+        } catch (signInError) {
+          final isAndroid =
+              !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+          if (!isAndroid || !isGoogleSignInTransportError(signInError)) {
+            rethrow;
+          }
+          debugPrint(
+            'google_sign_in failed, trying signInWithProvider: $signInError',
+          );
+          result = await _appAuth.signInWithProvider(GoogleAuthProvider());
         }
-        final credential = GoogleAuthProvider.credential(idToken: idToken);
-        result = await _appAuth.signInWithCredential(credential);
       }
       final user = result.user;
       if (user == null) {
@@ -179,6 +213,11 @@ class FirebaseSpectrumAuthService implements SpectrumAuthService {
         ),
       );
     } catch (error) {
+      if (isSupersededPopupAuthError(error)) {
+        debugPrint('Sign-in superseded by a newer attempt: $error');
+        return;
+      }
+
       debugPrint('Sign-in failed: $error');
       _emit(
         SpectrumAuthSnapshot(

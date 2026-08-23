@@ -77,8 +77,19 @@ class DriverScheduleImport {
     required Future<void> Function(PitShift shift) upsert,
     required Future<void> Function(String id) delete,
   }) async {
-    for (final shift in shifts) {
-      await upsert(shift);
+    final written = <String>[];
+    try {
+      for (final shift in shifts) {
+        await upsert(shift);
+        written.add(shift.id);
+      }
+    } catch (_) {
+      for (final id in written) {
+        try {
+          await delete(id);
+        } catch (_) {}
+      }
+      rethrow;
     }
     if (!replace) return;
     for (final stale in previous) {

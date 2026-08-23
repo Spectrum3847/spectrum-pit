@@ -152,10 +152,17 @@ class _DriverScheduleScreenState extends State<DriverScheduleScreen> {
     if (competition == null || competition.isEmpty) {
       return;
     }
-    final saved = await _store.load(competition);
-    if (saved == null || !mounted) {
+    final SavedDriverSchedule? loaded;
+    try {
+      loaded = await _store.load(competition);
+    } catch (error) {
+      debugPrint('Could not restore the saved rotation: $error');
       return;
     }
+    if (loaded == null || !mounted) {
+      return;
+    }
+    final saved = loaded;
     final index = scheduleConfigs.indexWhere((c) => c.label == saved.mode);
     setState(() {
       if (index != -1) {

@@ -18,7 +18,11 @@ class DesktopContainerPhotoSyncService
 
   @override
   Future<void> setDoc(String docId, Map<String, Object?> fields) =>
-      _firestore.setDocument(_path(docId), fields);
+      _firestore.setDocument(_path(docId), {
+        ...fields,
+
+        'updatedAtTs': DateTime.now().toUtc(),
+      });
 
   @override
   Future<void> deleteDoc(String docId) =>
