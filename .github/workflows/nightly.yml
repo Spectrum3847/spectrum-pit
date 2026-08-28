@@ -50,17 +50,13 @@ jobs:
           path: mirror
           fetch-depth: 0
 
-      - name: Switch to develop
+      - name: Start a fresh develop
         run: |
           set -euo pipefail
           cd mirror
 
-          if git rev-parse --verify "origin/$DEVELOP_BRANCH" >/dev/null 2>&1; then
-            git checkout -B "$DEVELOP_BRANCH" "origin/$DEVELOP_BRANCH"
-          else
-            git checkout --orphan "$DEVELOP_BRANCH"
-            git rm -rq --cached . || true
-          fi
+          git checkout -q --orphan snapshot
+          git rm -rq --cached . || true
 
       - name: Assemble the snapshot
         run: source/scripts/oss/assemble_mirror.sh source mirror
@@ -83,8 +79,13 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          TREE_CHANGED=false
-          git diff --cached --quiet || TREE_CHANGED=true
+
+          NEW_TREE="$(git write-tree)"
+          OLD_TREE="$(git rev-parse -q --verify "refs/remotes/origin/$DEVELOP_BRANCH^{tree}" || true)"
+          TREE_CHANGED=true
+          if [ "$NEW_TREE" = "$OLD_TREE" ]; then
+            TREE_CHANGED=false
+          fi
 
           LAST_PUBLISHED=""
           if git rev-parse -q --verify refs/tags/nightly-published >/dev/null; then
@@ -97,13 +98,17 @@ jobs:
           fi
           if [ "$TREE_CHANGED" = true ]; then
             git commit -q -m "Update"
-            git push -q --force origin "$DEVELOP_BRANCH"
+
+            git push -q --force origin "snapshot:$DEVELOP_BRANCH"
+            SNAPSHOT_SHA="$(git rev-parse HEAD)"
           else
             echo "Snapshot unchanged, but the last build never finished publishing; retrying."
+
+            SNAPSHOT_SHA="$(git rev-parse "refs/remotes/origin/$DEVELOP_BRANCH^{commit}")"
           fi
           {
             echo "changed=true"
-            echo "sha=$(git rev-parse HEAD)"
+            echo "sha=$SNAPSHOT_SHA"
           } >> "$GITHUB_OUTPUT"
 
       - name: Ensure the rolling nightly release exists
@@ -164,7 +169,7 @@ jobs:
           flutter build ios --release --no-codesign \
             --obfuscate --split-debug-info=build/symbols \
             --build-name "$VERSION_NAME" \
-            --build-number "${{ github.run_number }}" \
+            --build-number "$(( 1000 + GITHUB_RUN_NUMBER ))" \
             --dart-define=GIT_COMMIT="$SOURCE_SHA" \
             --dart-define=GIT_BRANCH="master" \
             --dart-define=BUILD_DATE="$(date -u +%Y-%m-%d)"
@@ -211,14 +216,15 @@ jobs:
             --icon-url "$SITE_URL/icon.png" \
             --description "Nightly build $SOURCE_SHA"
 
+      - name: Install the Firebase CLI
+        run: npm install -g firebase-tools
+
       - name: Deploy source JSON and icon to Firebase Hosting
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_NIGHTLY_HOSTING }}
         run: |
 
           rm -f "altstore_out/$IPA_FILE"
-
-          npm install -g firebase-tools
           printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/sa.json"
           export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
 
@@ -239,6 +245,24 @@ jobs:
              ! grep -q "current active version" <<<"$DEPLOY_OUTPUT"; then
             exit "$DEPLOY_STATUS"
           fi
+
+      - name: Verify the hosted source JSON advertises this build
+        run: |
+          set -euo pipefail
+          EXPECTED="${{ steps.package.outputs.build-version }}"
+          for attempt in 1 2 3 4 5; do
+            LIVE="$(curl -fsSL "$SITE_URL/nightly.json" \
+              | python3 -c 'import json,sys; print(json.load(sys.stdin)["apps"][0]["versions"][0]["buildVersion"])' \
+              2>/dev/null || true)"
+            if [ "$LIVE" = "$EXPECTED" ]; then
+              echo "Hosted nightly.json advertises build $LIVE"
+              exit 0
+            fi
+            echo "Attempt $attempt: hosted build is '$LIVE', want '$EXPECTED'; retrying in 10s"
+            sleep 10
+          done
+          echo "::error::Hosted nightly.json advertises build '$LIVE', expected '$EXPECTED'"
+          exit 1
 
   android:
     needs: sync
@@ -293,7 +317,7 @@ jobs:
         run: |
           flutter build apk --debug \
             --build-name "0.0.0-nightly" \
-            --build-number "${{ github.run_number }}" \
+            --build-number "$(( 1000 + GITHUB_RUN_NUMBER ))" \
             --dart-define=GIT_COMMIT="$SOURCE_SHA" \
             --dart-define=GIT_BRANCH="master" \
             --dart-define=BUILD_DATE="$(date -u +%Y-%m-%d)"
@@ -307,10 +331,164 @@ jobs:
           gh release upload nightly --repo "$GITHUB_REPOSITORY" \
             "$APK_FILE" --clobber
 
+  desktop:
+    needs: sync
+    if: needs.sync.outputs.changed == 'true'
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            runner: windows-latest
+            artifact: SpectrumPit-windows-x64.zip
+          - platform: macos
+            runner: macos-latest
+            artifact: SpectrumPit-macos.zip
+          - platform: linux
+            runner: ubuntu-latest
+            artifact: SpectrumPit-linux-x86_64.AppImage
+    runs-on: ${{ matrix.runner }}
+
+    permissions:
+      contents: write
+
+    env:
+      SOURCE_SHA: ${{ needs.sync.outputs.source_sha }}
+      ARTIFACT: ${{ matrix.artifact }}
+    steps:
+      - name: Checkout the snapshot
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.sync.outputs.sha }}
+          persist-credentials: false
+
+      - name: Install Linux build dependencies
+        if: matrix.platform == 'linux'
+        timeout-minutes: 5
+        run: |
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 install -y \
+            clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Fetch packages
+        run: flutter pub get
+
+      - name: Build desktop app
+        shell: bash
+        env:
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+        run: |
+          build() {
+            flutter build ${{ matrix.platform }} --release \
+              --obfuscate --split-debug-info=build/symbols \
+              --dart-define=GIT_COMMIT="$SOURCE_SHA" \
+              --dart-define=GIT_BRANCH="master" \
+              --dart-define=BUILD_DATE="$(date -u +%Y-%m-%d)" \
+              --dart-define=GOOGLE_OAUTH_CLIENT_ID="${GOOGLE_OAUTH_CLIENT_ID}" \
+              --dart-define=GOOGLE_OAUTH_CLIENT_SECRET="${GOOGLE_OAUTH_CLIENT_SECRET}"
+          }
+          for attempt in 1 2 3; do
+            if build; then exit 0; fi
+            echo "Build attempt $attempt failed; retrying in 30s"
+            sleep 30
+          done
+          echo "Build failed after 3 attempts"
+          exit 1
+
+      - name: Verify VC++ Runtime DLLs (Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          $releaseDir = "build/windows/x64/runner/Release"
+          foreach ($dll in "vcruntime140.dll", "msvcp140.dll") {
+            $path = Join-Path $releaseDir $dll
+            if (!(Test-Path $path)) {
+              throw "VC++ Runtime DLL missing from the build output: $path"
+            }
+            Write-Host "Bundled $dll"
+          }
+
+      - name: Package Windows build (unsigned ZIP)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          $releaseDir = "build/windows/x64/runner/Release"
+          Copy-Item "scripts/install-windows-start-menu.ps1" "$releaseDir/"
+          Compress-Archive -Path "$releaseDir/*" -DestinationPath $env:ARTIFACT
+
+          $zip = [IO.Compression.ZipFile]::OpenRead((Resolve-Path $env:ARTIFACT))
+          $hasScript = $zip.Entries.Name -contains 'install-windows-start-menu.ps1'
+          $zip.Dispose()
+          if (-not $hasScript) {
+            throw "install-windows-start-menu.ps1 is missing from $env:ARTIFACT"
+          }
+
+      - name: Package macOS build (unsigned .app zip)
+        if: matrix.platform == 'macos'
+        shell: bash
+        run: |
+          set -euo pipefail
+          app="$(find build/macos/Build/Products/Release -maxdepth 1 -name '*.app' -print -quit)"
+          if [ -z "$app" ]; then echo "No .app bundle found"; exit 1; fi
+
+          ditto -c -k --sequesterRsrc --keepParent "$app" "$ARTIFACT"
+
+      - name: Package Linux build (AppImage)
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="build/linux/x64/release/bundle"
+          appdir="AppDir"
+          mkdir -p "$appdir/usr/bin"
+          cp -r "$bundle"/* "$appdir/usr/bin/"
+
+          bin="$(find "$appdir/usr/bin" -maxdepth 1 -type f -executable ! -name '*.so*' | head -1)"
+          binname="$(basename "$bin")"
+
+          printf '#!/bin/sh\n' > "$appdir/AppRun"
+          cat >> "$appdir/AppRun" <<EOF
+          HERE="\$(dirname "\$(readlink -f "\$0")")"
+          exec "\$HERE/usr/bin/$binname" "\$@"
+          EOF
+          chmod +x "$appdir/AppRun"
+          cat > "$appdir/spectrumpit.desktop" <<EOF
+          [Desktop Entry]
+          Name=Spectrum Pit
+          Exec=$binname
+          Icon=spectrumpit
+          Type=Application
+          Categories=Utility;
+          EOF
+
+          cp web/icons/Icon-512.png "$appdir/spectrumpit.png"
+          wget -q "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage" -O appimagetool
+          chmod +x appimagetool
+          ARCH=x86_64 ./appimagetool --appimage-extract-and-run "$appdir" "$ARTIFACT"
+
+      - name: Publish to the rolling nightly release
+
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload nightly --repo "$GITHUB_REPOSITORY" \
+            "$ARTIFACT" --clobber
+
   finalize:
 
-    needs: [sync, ios, android]
-    if: always() && needs.ios.result == 'success' && needs.android.result == 'success'
+    needs: [sync, ios, android, desktop]
+    if: >-
+      always() && needs.ios.result == 'success' &&
+      needs.android.result == 'success' && needs.desktop.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
