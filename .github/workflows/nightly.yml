@@ -192,8 +192,7 @@ jobs:
           echo "Requested version '$VERSION_NAME' build '${{ github.run_number }}' -> real '$REAL_VERSION' / '$REAL_BUILD'"
           echo "version=$REAL_VERSION" >> "$GITHUB_OUTPUT"
           echo "build-version=$REAL_BUILD" >> "$GITHUB_OUTPUT"
-
-          IPA_FILE="SpectrumPit-nightly-$REAL_BUILD.ipa"
+          IPA_FILE="SpectrumPit-nightly.ipa"
           echo "IPA_FILE=$IPA_FILE" >> "$GITHUB_ENV"
           mkdir -p altstore_out/Payload
           cp -R "$APP_PATH" altstore_out/Payload/
@@ -323,7 +322,7 @@ jobs:
       - name: Build debug APK
         run: |
           BUILD_NUMBER="$(( 1000 + GITHUB_RUN_NUMBER ))"
-          echo "APK_FILE=SpectrumPit-nightly-$BUILD_NUMBER.apk" >> "$GITHUB_ENV"
+          echo "APK_FILE=SpectrumPit-nightly.apk" >> "$GITHUB_ENV"
           build_date="$(date -u +%Y-%m-%d)"
           flutter build apk --debug \
             --build-name "0.0.0-nightly" \
@@ -347,18 +346,17 @@ jobs:
     timeout-minutes: 45
     strategy:
       fail-fast: false
-
       matrix:
         include:
           - platform: windows
             runner: windows-latest
-            artifact: SpectrumPit-windows-x64-${{ github.run_number }}.zip
+            artifact: SpectrumPit-windows-x64.zip
           - platform: macos
             runner: macos-latest
-            artifact: SpectrumPit-macos-${{ github.run_number }}.zip
+            artifact: SpectrumPit-macos.zip
           - platform: linux
             runner: ubuntu-latest
-            artifact: SpectrumPit-linux-x86_64-${{ github.run_number }}.AppImage
+            artifact: SpectrumPit-linux-x86_64.AppImage
     runs-on: ${{ matrix.runner }}
 
     permissions:
@@ -521,23 +519,3 @@ jobs:
           git tag -f -a nightly-published "${{ needs.sync.outputs.sha }}" \
             -m "${{ needs.sync.outputs.source_sha }}"
           git push -q -f origin refs/tags/nightly-published
-
-      - name: Prune old nightly assets
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          PUBLISHED_URL="$(curl -fsSL "https://spectrumpit-nightly.web.app/nightly.json" \
-            | python3 -c 'import json,sys; print(json.load(sys.stdin)["apps"][0]["versions"][0]["downloadURL"])')"
-          IPA_REFERENCED="$(basename "$PUBLISHED_URL")"
-          python3 scripts/ci/prune_nightly_assets.py --repo "$GITHUB_REPOSITORY" --tag nightly \
-            --pattern 'SpectrumPit-nightly-*.ipa' --referenced-name "$IPA_REFERENCED" --max-age-days 3
-          python3 scripts/ci/prune_nightly_assets.py --repo "$GITHUB_REPOSITORY" --tag nightly \
-            --pattern 'SpectrumPit-nightly-*.apk' --max-age-days 3
-          python3 scripts/ci/prune_nightly_assets.py --repo "$GITHUB_REPOSITORY" --tag nightly \
-            --pattern 'SpectrumPit-windows-x64-*.zip' --max-age-days 3
-          python3 scripts/ci/prune_nightly_assets.py --repo "$GITHUB_REPOSITORY" --tag nightly \
-            --pattern 'SpectrumPit-macos-*.zip' --max-age-days 3
-          python3 scripts/ci/prune_nightly_assets.py --repo "$GITHUB_REPOSITORY" --tag nightly \
-            --pattern 'SpectrumPit-linux-x86_64-*.AppImage' --max-age-days 3
