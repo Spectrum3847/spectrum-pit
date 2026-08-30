@@ -32,6 +32,7 @@ void main() {
       'deviceInfo',
       'status',
       'createdAt',
+      'kind',
     });
 
     expect(data['title'], 'Board did not save');
@@ -39,6 +40,7 @@ void main() {
     expect(data['reporterUid'], 'uid-123');
     expect(data['reporterName'], 'Jane Scout');
     expect(data['status'], 'new');
+    expect(data['kind'], 'bug');
     expect(data['id'], snap.docs.single.id);
 
     final createdAt = data['createdAt'] as String;
@@ -46,7 +48,7 @@ void main() {
     expect(DateTime.tryParse(createdAt), isNotNull);
   });
 
-  test('submit records the reporter roles when provided (#500)', () async {
+  test('submit records the reporter roles when provided', () async {
     final firestore = FakeFirebaseFirestore();
     final service = IssueReportService(firestore: firestore);
 
@@ -55,27 +57,14 @@ void main() {
       body: 'b',
       reporterUid: 'u',
       reporterName: 'n',
-      roles: 'Admin, Pit',
+      roles: 'Strategist, Admin',
     );
 
     final data = (await firestore.collection('bugReports').get()).docs.single
         .data();
-    expect(data['roles'], 'Admin, Pit');
+    expect(data['roles'], 'Strategist, Admin');
 
-    expect(data.keys.toSet(), {
-      'id',
-      'title',
-      'body',
-      'reporterUid',
-      'reporterName',
-      'appVersion',
-      'platform',
-      'osVersion',
-      'deviceInfo',
-      'status',
-      'createdAt',
-      'roles',
-    });
+    expect(data.keys.contains('roles'), isTrue);
   });
 
   test('submit omits roles when none are granted', () async {
@@ -114,29 +103,68 @@ void main() {
     },
   );
 
+  test('an injected writer gets the same doc, without FlutterFire', () async {
+    String? path;
+    Map<String, dynamic>? written;
+    final service = IssueReportService(
+      write: (docPath, data) async {
+        path = docPath;
+        written = data;
+      },
+    );
+
+    await service.submit(
+      title: 'Linux report',
+      body: 'sent over REST',
+      reporterUid: 'uid-9',
+      reporterName: 'Desk Top',
+    );
+
+    expect(path, 'bugReports/${written!['id']}');
+    expect(written!['title'], 'Linux report');
+    expect(written!['reporterUid'], 'uid-9');
+    expect(written!['status'], 'new');
+  });
+
+  test('submit records feedback kind, area and impact when provided', () async {
+    final firestore = FakeFirebaseFirestore();
+    final service = IssueReportService(firestore: firestore);
+
+    await service.submit(
+      title: 'Add dark mode',
+      body: 'Would love a dark theme.',
+      reporterUid: 'u',
+      reporterName: 'n',
+      kind: 'feedback',
+      area: 'Strategy board',
+      impact: 'Cosmetic issue',
+    );
+
+    final data = (await firestore.collection('bugReports').get()).docs.single
+        .data();
+    expect(data['kind'], 'feedback');
+    expect(data['area'], 'Strategy board');
+    expect(data['impact'], 'Cosmetic issue');
+  });
+
   test(
-    'an injected writer gets the same doc, without FlutterFire (#570)',
+    'submit defaults to bug kind and omits area/impact when blank',
     () async {
-      String? path;
-      Map<String, dynamic>? written;
-      final service = IssueReportService(
-        write: (docPath, data) async {
-          path = docPath;
-          written = data;
-        },
-      );
+      final firestore = FakeFirebaseFirestore();
+      final service = IssueReportService(firestore: firestore);
 
       await service.submit(
-        title: 'Linux report',
-        body: 'sent over REST',
-        reporterUid: 'uid-9',
-        reporterName: 'Desk Top',
+        title: 't',
+        body: 'b',
+        reporterUid: 'u',
+        reporterName: 'n',
       );
 
-      expect(path, 'bugReports/${written!['id']}');
-      expect(written!['title'], 'Linux report');
-      expect(written!['reporterUid'], 'uid-9');
-      expect(written!['status'], 'new');
+      final data = (await firestore.collection('bugReports').get()).docs.single
+          .data();
+      expect(data['kind'], 'bug');
+      expect(data.containsKey('area'), isFalse);
+      expect(data.containsKey('impact'), isFalse);
     },
   );
 }

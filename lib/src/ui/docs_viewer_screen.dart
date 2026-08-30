@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/services.dart' show AssetManifest, rootBundle;
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
 import '../models/user_role.dart';
@@ -89,6 +89,20 @@ const List<_DocEntry> _docs = <_DocEntry>[
   ),
 ];
 
+Future<Set<String>>? _bundledDocs;
+
+Future<Set<String>> bundledDocAssets() {
+  return _bundledDocs ??= AssetManifest.loadFromAssetBundle(rootBundle)
+      .then(
+        (manifest) =>
+            manifest.listAssets().where((a) => a.startsWith('docs/')).toSet(),
+      )
+      .onError<Object>((error, stack) {
+        _bundledDocs = null;
+        throw error;
+      });
+}
+
 class DocsTab extends StatelessWidget {
   const DocsTab({required this.roles, super.key});
 
@@ -96,12 +110,32 @@ class DocsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final groups = <String, List<_DocEntry>>{};
-    for (final d in _docs) {
-      if (!d.visibleTo(roles)) continue;
-      groups.putIfAbsent(d.group, () => <_DocEntry>[]).add(d);
-    }
+    return FutureBuilder<Set<String>>(
+      future: bundledDocAssets(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final available = snapshot.data ?? const <String>{};
+        final groups = <String, List<_DocEntry>>{};
+        for (final d in _docs) {
+          if (!d.visibleTo(roles) || !available.contains(d.asset)) continue;
+          groups.putIfAbsent(d.group, () => <_DocEntry>[]).add(d);
+        }
+        if (groups.isEmpty) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Text('This build bundles no documentation.'),
+            ),
+          );
+        }
+        return _buildList(context, groups);
+      },
+    );
+  }
 
+  Widget _buildList(BuildContext context, Map<String, List<_DocEntry>> groups) {
     return ListView(
       padding: const EdgeInsets.symmetric(vertical: 8),
       children: [
@@ -152,11 +186,19 @@ class DocHelpButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
-      icon: const Icon(Icons.help_outline_rounded),
-      tooltip: tooltip ?? 'Open the manual',
-      visualDensity: VisualDensity.compact,
-      onPressed: () => openBundledDoc(context, docAsset),
+    return FutureBuilder<Set<String>>(
+      future: bundledDocAssets(),
+      builder: (context, snapshot) {
+        if (snapshot.data?.contains(docAsset) != true) {
+          return const SizedBox.shrink();
+        }
+        return IconButton(
+          icon: const Icon(Icons.help_outline_rounded),
+          tooltip: tooltip ?? 'Open the manual',
+          visualDensity: VisualDensity.compact,
+          onPressed: () => openBundledDoc(context, docAsset),
+        );
+      },
     );
   }
 }

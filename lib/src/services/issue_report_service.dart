@@ -28,6 +28,10 @@ class IssueReportService {
     required String reporterUid,
     required String reporterName,
     String roles = '',
+
+    String kind = 'bug',
+    String area = '',
+    String impact = '',
   }) async {
     final info = await DebugInfo.gather();
 
@@ -40,6 +44,9 @@ class IssueReportService {
       'reporterName': _clamp(reporterName, 128),
 
       if (roles.isNotEmpty) 'roles': _clamp(roles, 128),
+      'kind': kind == 'feedback' ? 'feedback' : 'bug',
+      if (area.isNotEmpty) 'area': _clamp(area, 64),
+      if (impact.isNotEmpty) 'impact': _clamp(impact, 64),
       'appVersion': _clamp(info.reportVersion, 64),
       'platform': _clamp(info.platform, 64),
       'osVersion': _clamp(info.osVersion, 128),

@@ -12,6 +12,7 @@ import '../models/user_role.dart';
 import '../services/issue_report_service.dart';
 import '../services/spectrum_auth_service.dart';
 import '../services/telemetry_service.dart';
+import '../services/web_channel_service.dart';
 import '../state/theme_controller.dart';
 import '../state/user_role_controller.dart';
 
@@ -52,63 +53,130 @@ class _SettingsTabState extends State<SettingsTab> {
   bool get _canReport =>
       widget.authService.currentUser != null && _roleCtrl.roles.isMember;
 
+  static const List<String> _reportAreas = [
+    'Inventory (tool locations, lab/pit maps)',
+    'Event packing (Packing/Staging/Loading/Ready)',
+    'Borrowed tools tracker',
+    'Lab and pit maps',
+    'Pit team scheduling',
+    'Firebase sync',
+    'Auth / sign-in',
+    'Build, CI, or release tooling',
+    'Docs',
+    'Not sure',
+  ];
+
+  static const List<String> _reportImpacts = [
+    'Blocks work completely',
+    'Major degradation or frequent failure',
+    'Minor bug or occasional failure',
+    'Cosmetic issue',
+  ];
+
   Future<void> _reportProblem() async {
     final user = widget.authService.currentUser;
     if (user == null) return;
 
     final titleCtrl = TextEditingController();
     final bodyCtrl = TextEditingController();
+    var kind = 'bug';
+    String? area;
+    String? impact;
     final submitted = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Report a problem'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Tell us what went wrong. Your name and device details are '
-                'attached automatically to help us debug.',
-                style: Theme.of(ctx).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: titleCtrl,
-                textCapitalization: TextCapitalization.sentences,
-                maxLength: 200,
-                decoration: const InputDecoration(
-                  labelText: 'Summary',
-                  hintText: 'Something did not work',
-                  border: OutlineInputBorder(),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Report a problem'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Your name and device details are attached automatically '
+                  'to help us debug.',
+                  style: Theme.of(ctx).textTheme.bodySmall,
                 ),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: bodyCtrl,
-                maxLines: 5,
-                maxLength: 4096,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  labelText: 'What happened',
-                  hintText: 'Steps to reproduce, what you expected, etc.',
-                  border: OutlineInputBorder(),
+                const SizedBox(height: 12),
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(value: 'bug', label: Text('Bug')),
+                    ButtonSegment(value: 'feedback', label: Text('Feedback')),
+                  ],
+                  selected: {kind},
+                  onSelectionChanged: (selection) =>
+                      setDialogState(() => kind = selection.first),
                 ),
-              ),
-            ],
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: area,
+                  decoration: const InputDecoration(
+                    labelText: 'Area',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: [
+                    for (final option in _reportAreas)
+                      DropdownMenuItem(value: option, child: Text(option)),
+                  ],
+                  onChanged: (value) => setDialogState(() => area = value),
+                ),
+                if (kind == 'bug') ...[
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    initialValue: impact,
+                    decoration: const InputDecoration(
+                      labelText: 'Impact',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: [
+                      for (final option in _reportImpacts)
+                        DropdownMenuItem(value: option, child: Text(option)),
+                    ],
+                    onChanged: (value) => setDialogState(() => impact = value),
+                  ),
+                ],
+                const SizedBox(height: 8),
+                TextField(
+                  controller: titleCtrl,
+                  textCapitalization: TextCapitalization.sentences,
+                  maxLength: 200,
+                  decoration: const InputDecoration(
+                    labelText: 'Summary',
+                    hintText: 'Something did not work',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: bodyCtrl,
+                  maxLines: 5,
+                  maxLength: 4096,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: InputDecoration(
+                    labelText: kind == 'feedback'
+                        ? 'Your feedback'
+                        : 'What happened',
+                    hintText: kind == 'feedback'
+                        ? 'What would you like to see?'
+                        : 'Steps to reproduce, what you expected, etc.',
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Send'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Send'),
-          ),
-        ],
       ),
     );
     final title = titleCtrl.text.trim();
@@ -129,6 +197,9 @@ class _SettingsTabState extends State<SettingsTab> {
             ? user.displayName
             : 'Unknown',
         roles: _rolesLabel(),
+        kind: kind,
+        area: area ?? '',
+        impact: kind == 'bug' ? (impact ?? '') : '',
       );
       _showReportSnack('Report sent. Thank you.');
     } catch (e) {
@@ -219,6 +290,10 @@ class _SettingsTabState extends State<SettingsTab> {
             _TelemetryTile(service: widget.telemetryService),
             const SizedBox(height: 12),
             const _DebugInfoCard(),
+            if (kIsWeb) ...[
+              const SizedBox(height: 12),
+              const _WebChannelTile(),
+            ],
             if (_isDesktopPlatform) ...[
               const SizedBox(height: 12),
               const _LauncherTile(),
@@ -356,6 +431,79 @@ class _LauncherTileState extends State<_LauncherTile> {
   }
 }
 
+class _WebChannelTile extends StatefulWidget {
+  const _WebChannelTile();
+
+  @override
+  State<_WebChannelTile> createState() => _WebChannelTileState();
+}
+
+class _WebChannelTileState extends State<_WebChannelTile> {
+  final WebChannelService _service = WebChannelService();
+  bool _switching = false;
+  String? _status;
+
+  WebChannel? get _current => WebChannelService.channelForHost(Uri.base.host);
+
+  Future<void> _switchTo(WebChannel channel) async {
+    if (_switching || channel == _current) return;
+    setState(() {
+      _switching = true;
+      _status = 'Checking the ${channel.label.toLowerCase()} site...';
+    });
+    final available = await _service.hasPublishedBuild(channel);
+    if (!mounted) return;
+    if (!available) {
+      setState(() {
+        _switching = false;
+        _status =
+            'The ${channel.label.toLowerCase()} site has no build '
+            'published yet.';
+      });
+      return;
+    }
+    setState(
+      () => _status = 'Opening the ${channel.label.toLowerCase()} site...',
+    );
+    await launchUrl(channel.url, webOnlyWindowName: '_self');
+    if (mounted) setState(() => _switching = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final current = _current;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Web channel', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 4),
+            Text(
+              'Stable follows published releases; staging follows every '
+              'change as it lands. Switching opens the other site.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            SegmentedButton<WebChannel>(
+              segments: [
+                for (final channel in WebChannel.values)
+                  ButtonSegment(value: channel, label: Text(channel.label)),
+              ],
+              selected: {?current},
+              emptySelectionAllowed: current == null,
+              onSelectionChanged: _switching ? null : (s) => _switchTo(s.first),
+              showSelectedIcon: false,
+            ),
+            if (_status != null) ...[const SizedBox(height: 8), Text(_status!)],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _DesktopUpdateTile extends StatefulWidget {
   const _DesktopUpdateTile();
 
@@ -370,11 +518,18 @@ class _DesktopUpdateTileState extends State<_DesktopUpdateTile> {
   bool _installing = false;
   String? _status;
   DesktopUpdateInfo? _update;
+  DesktopUpdateChannel _channel = DesktopUpdateChannel.stable;
+
+  @override
+  void initState() {
+    super.initState();
+    _service.currentChannel().then((channel) {
+      if (mounted) setState(() => _channel = channel);
+    });
+  }
 
   bool get _canInstall =>
-      _update?.appImageUrl != null &&
-      _update?.expectedSha256 != null &&
-      _selfUpdate.canSelfUpdate;
+      _update?.assetUrl != null && _selfUpdate.canSelfUpdate;
 
   Future<void> _check() async {
     setState(() {
@@ -384,6 +539,34 @@ class _DesktopUpdateTileState extends State<_DesktopUpdateTile> {
     });
     try {
       final info = await _service.checkForUpdate();
+      if (!mounted) return;
+      setState(() {
+        _update = info;
+        _status = info == null
+            ? 'You are on the latest version.'
+            : 'Update available: ${info.latestVersion}.';
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _status = 'Could not check for updates right now.');
+    } finally {
+      if (mounted) setState(() => _checking = false);
+    }
+  }
+
+  Future<void> _switchChannel(DesktopUpdateChannel channel) async {
+    setState(() {
+      _channel = channel;
+      _checking = true;
+      _status = null;
+      _update = null;
+    });
+    try {
+      await _service.setChannel(channel);
+      final info = await _service.checkForUpdate(
+        channel: channel,
+        ignoreVersionGate: true,
+      );
       if (!mounted) return;
       setState(() {
         _update = info;
@@ -413,9 +596,18 @@ class _DesktopUpdateTileState extends State<_DesktopUpdateTile> {
 
   Future<void> _install() async {
     final info = _update;
-    final url = info?.appImageUrl;
+    final url = info?.assetUrl;
     final digest = info?.expectedSha256;
-    if (url == null || digest == null) return;
+    if (url == null) return;
+    if (digest == null || digest.isEmpty) {
+      setState(() {
+        _status =
+            'This release has no checksum, so it cannot be installed '
+            'automatically. Opening the download page.';
+      });
+      await launchUrl(info!.releaseUrl, mode: LaunchMode.externalApplication);
+      return;
+    }
     setState(() {
       _installing = true;
       _status = 'Downloading update...';
@@ -449,6 +641,24 @@ class _DesktopUpdateTileState extends State<_DesktopUpdateTile> {
               'Desktop builds do not auto-update. Check for a newer release '
               'and download it when one is available.',
               style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            SegmentedButton<DesktopUpdateChannel>(
+              segments: const [
+                ButtonSegment(
+                  value: DesktopUpdateChannel.stable,
+                  label: Text('Stable'),
+                ),
+                ButtonSegment(
+                  value: DesktopUpdateChannel.nightly,
+                  label: Text('Nightly'),
+                ),
+              ],
+              selected: {_channel},
+              onSelectionChanged: (_checking || _installing)
+                  ? null
+                  : (s) => _switchChannel(s.first),
+              showSelectedIcon: false,
             ),
             if (_status != null) ...[const SizedBox(height: 8), Text(_status!)],
             const SizedBox(height: 12),

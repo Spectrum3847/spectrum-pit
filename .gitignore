@@ -1,4 +1,3 @@
-# Miscellaneous
 *.class
 *.log
 *.pyc
@@ -12,18 +11,11 @@
 .swiftpm/
 migrate_working_dir/
 
-# IntelliJ related
 *.iml
 *.ipr
 *.iws
 .idea/
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
-
-# Flutter/Dart/Pub related
 **/doc/api/
 **/ios/Flutter/.last_build_id
 .dart_tool/
@@ -33,21 +25,16 @@ migrate_working_dir/
 /build/
 /coverage/
 
-# Symbolication related
 app.*.symbols
 
-# Obfuscation related
 app.*.map.json
 
-# Android Studio will place build artifacts here
 /android/app/debug
 /android/app/profile
 /android/app/release
 
-# TBA API key — never commit
 .env
 
-# Firebase — credentials and generated configs
 .firebase/
 firebase-debug.log
 firestore-debug.log
@@ -55,50 +42,38 @@ firestore-debug.log
 **/GoogleService-Info.plist
 **/serviceAccount*.json
 
-# claude
 .claude/settings.local.json
-
-# flutter setup
 
 temp/
 
-# Agent session-log dumps (sometimes accidentally placed at repo root by
-# Claude Code workflows; never commit them).
 claude-context-*/
 /log.txt
 
-# node
 versions/node
 alias/
 .cache/bin/node*
 
-# impeccable critique snapshots (generated archives; the design.json sidecar
-# and DESIGN.md/PRODUCT.md are tracked, but per-run critiques are not).
 .impeccable/critique/
-# accuracy-cron dependencies (lockfile is tracked, modules are not)
+
 **/.pnpm-store/
 scripts/accuracy-cron/node_modules/
 scripts/sheets-export-cron/node_modules/
 
-# Background-agent git worktrees (transient)
 .claude/worktrees/
 scripts/promotion-cron/node_modules/
 scripts/report-cron/node_modules/
 scripts/usage-cron/node_modules/
-# photo-worker was missed when the others were added, so a pnpm install in it
-# left two state files tracked (#404 review).
+
 scripts/photo-worker/node_modules/
-# MCP server dependencies (lockfile is tracked, modules are not)
+scripts/firebase-deploy/node_modules/
+
 mcp/node_modules/
 
-# mimocode agent-tooling state (never ship or track; see #533)
 .mimocode/
 exports/
 
-# Cloudflare Worker local state (scripts/photo-worker)
 .wrangler/
 
-# misc
 pit-app-device-test-plan.html
 pit-1.0.0-maintainer-checklist.html
 spectrumpit-setup.html
