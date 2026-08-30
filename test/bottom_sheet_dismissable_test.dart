@@ -33,6 +33,29 @@ void main() {
           'out of them without a drag handle (#292):\n${offenders.join('\n')}',
     );
   });
+
+  test('a commented-out argument does not satisfy the check', () {
+    const lineComment = '''
+showModalBottomSheet(
+  context: context,
+  // showDragHandle: true,
+  isScrollControlled: true,
+);
+''';
+    const blockComment = '''
+showModalBottomSheet(
+  context: context,
+  /* showDragHandle: true, */
+  isScrollControlled: true,
+);
+''';
+    for (final source in [lineComment, blockComment]) {
+      final masked = _withoutStringLiterals(source);
+      final call = _callAt(masked, masked.indexOf('showModalBottomSheet'));
+      expect(call, contains('isScrollControlled: true'));
+      expect(call, isNot(contains('showDragHandle: true')));
+    }
+  });
 }
 
 String _callAt(String source, int start) {
@@ -52,9 +75,39 @@ String _callAt(String source, int start) {
 String _withoutStringLiterals(String source) {
   final out = StringBuffer();
   String? quote;
+  var inLineComment = false;
+  var inBlockComment = false;
   for (var i = 0; i < source.length; i++) {
     final char = source[i];
+    if (inLineComment) {
+      if (char == '\n') inLineComment = false;
+      out.write(char == '\n' ? '\n' : ' ');
+      continue;
+    }
+    if (inBlockComment) {
+      if (char == '*' && i + 1 < source.length && source[i + 1] == '/') {
+        inBlockComment = false;
+        out.write('  ');
+        i++;
+        continue;
+      }
+      out.write(char == '\n' ? '\n' : ' ');
+      continue;
+    }
     if (quote == null) {
+      final next = i + 1 < source.length ? source[i + 1] : '';
+      if (char == '/' && next == '/') {
+        inLineComment = true;
+        out.write('  ');
+        i++;
+        continue;
+      }
+      if (char == '/' && next == '*') {
+        inBlockComment = true;
+        out.write('  ');
+        i++;
+        continue;
+      }
       if (char == "'" || char == '"') quote = char;
       out.write(char);
       continue;

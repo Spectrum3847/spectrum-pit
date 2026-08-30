@@ -185,10 +185,14 @@ service cloud.firestore {
             || data.createdAt == resource.data.createdAt)
         && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['displayName', 'email', 'roles'])
-        && data.roles is list
-        && data.roles.size() >= 1
-        && data.roles.size() <= 4
-        && data.roles.hasOnly(['viewer', 'pit', 'developer', 'admin'])
+        && (!('roles' in data)
+            || (data.roles is list
+                && data.roles.size() >= 1
+                && data.roles.size() <= 4
+                && data.roles.hasOnly(['viewer', 'pit', 'developer', 'admin'])))
+        && ('roles' in data
+            || (data.role is string
+                && data.role in ['viewer', 'pit', 'developer', 'admin']))
         && (!('displayName' in data)
             || (data.displayName is string && data.displayName.size() <= 256))
         && (!('email' in data)
@@ -209,7 +213,7 @@ service cloud.firestore {
             || (data.mapRef is string && data.mapRef.size() <= 256))
         && data.status in ['inLab', 'inPit', 'borrowed']
         && isSaneTimestamp(data.updatedAt)
-        && (!('updatedAtTs' in data) || hasBoundedUpdatedAtTs(data));
+        && hasBoundedUpdatedAtTs(data);
     }
 
     function isValidPackingRecord(data) {
@@ -223,7 +227,7 @@ service cloud.firestore {
         && (!('photoRef' in data)
             || (data.photoRef is string && data.photoRef.size() <= 512))
         && isSaneTimestamp(data.updatedAt)
-        && (!('updatedAtTs' in data) || hasBoundedUpdatedAtTs(data));
+        && hasBoundedUpdatedAtTs(data);
     }
 
     function isValidBorrowRecord(data) {
@@ -252,7 +256,7 @@ service cloud.firestore {
             || isSaneTimestamp(data.estimatedReturn))
         && (!('checkedInAt' in data)
             || isSaneTimestamp(data.checkedInAt))
-        && (!('updatedAtTs' in data) || hasBoundedUpdatedAtTs(data));
+        && hasBoundedUpdatedAtTs(data);
     }
 
     function isValidMapLocation(data) {
@@ -272,7 +276,7 @@ service cloud.firestore {
             || (data.inventoryItemId is string
                 && data.inventoryItemId.size() <= 256))
         && isSaneTimestamp(data.updatedAt)
-        && (!('updatedAtTs' in data) || hasBoundedUpdatedAtTs(data));
+        && hasBoundedUpdatedAtTs(data);
     }
 
     function isValidMapDiagram(data) {
@@ -281,7 +285,7 @@ service cloud.firestore {
         && data.diagramKey.size() > 0
         && data.diagramKey.size() <= 512
         && isSaneTimestamp(data.updatedAt)
-        && (!('updatedAtTs' in data) || hasBoundedUpdatedAtTs(data));
+        && hasBoundedUpdatedAtTs(data);
     }
 
     function isValidContainerPhoto(data) {
@@ -294,7 +298,7 @@ service cloud.firestore {
         && data.photoRef.size() > 0
         && data.photoRef.size() <= 512
         && isSaneTimestamp(data.updatedAt)
-        && (!('updatedAtTs' in data) || hasBoundedUpdatedAtTs(data));
+        && hasBoundedUpdatedAtTs(data);
     }
 
     function isValidPitShift(data) {
@@ -328,13 +332,14 @@ service cloud.firestore {
         && (!('importedFrom' in data)
             || data.importedFrom in ['driver-schedule'])
         && isSaneTimestamp(data.updatedAt)
-        && (!('updatedAtTs' in data) || hasBoundedUpdatedAtTs(data));
+        && hasBoundedUpdatedAtTs(data);
     }
 
     function isValidBugReport(data) {
       return data.keys().hasOnly(['reporterUid', 'reporterName', 'title',
               'body', 'status', 'createdAt', 'appVersion', 'platform',
-              'osVersion', 'deviceInfo', 'roles', 'id'])
+              'osVersion', 'deviceInfo', 'roles', 'id', 'kind', 'area',
+              'impact'])
         && data.reporterUid is string
         && data.reporterUid.size() > 0
         && data.reporterUid.size() <= 128
@@ -356,7 +361,12 @@ service cloud.firestore {
         && (!('deviceInfo' in data)
             || (data.deviceInfo is string && data.deviceInfo.size() <= 256))
         && (!('roles' in data)
-            || (data.roles is string && data.roles.size() <= 128));
+            || (data.roles is string && data.roles.size() <= 128))
+        && (!('kind' in data) || data.kind in ['bug', 'feedback'])
+        && (!('area' in data)
+            || (data.area is string && data.area.size() <= 64))
+        && (!('impact' in data)
+            || (data.impact is string && data.impact.size() <= 64));
     }
 
     function isValidTelemetry(data) {

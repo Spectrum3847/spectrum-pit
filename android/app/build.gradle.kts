@@ -7,9 +7,9 @@ import java.util.Properties
 plugins {
     id("com.android.application")
     id("dev.flutter.flutter-gradle-plugin")
-    // START: FlutterFire Configuration
+
     id("com.google.gms.google-services")
-    // END: FlutterFire Configuration
+
 }
 
 val flutterExtension = extensions.getByType<FlutterExtension>()
@@ -53,12 +53,7 @@ android {
 
     buildTypes {
         release {
-            // Release builds use the keystore declared in android/key.properties
-            // (gitignored). When that file is absent (e.g. CI without secrets
-            // wired up), leave the build unsigned rather than falling back to
-            // the debug keystore, so a signed release artifact is never
-            // mistaken for a real release. CI that needs an installable APK
-            // builds the debug variant instead.
+
             if (hasReleaseSigning) {
                 signingConfig = signingConfigs.getByName("release")
             }

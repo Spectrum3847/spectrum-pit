@@ -18,6 +18,8 @@ void main() {
       ),
     );
 
+    await tester.pumpAndSettle();
+
     expect(find.text('Start here'), findsOneWidget);
     expect(find.text('Developer reference'), findsOneWidget);
     expect(find.text('Reference'), findsOneWidget);
@@ -36,6 +38,7 @@ void main() {
         home: Scaffold(body: DocsTab(roles: {UserRole.pit})),
       ),
     );
+    await tester.pumpAndSettle();
 
     expect(find.text('Overview'), findsOneWidget);
 
@@ -53,6 +56,7 @@ void main() {
         home: Scaffold(body: DocsTab(roles: {UserRole.developer})),
       ),
     );
+    await tester.pumpAndSettle();
 
     await tester.tap(find.text('Overview'));
     await tester.pumpAndSettle();

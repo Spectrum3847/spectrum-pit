@@ -4,7 +4,10 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:spectrumpit/src/services/desktop_self_update_service.dart'
+    show DesktopSelfUpdatePlatform;
 import 'package:spectrumpit/src/services/desktop_update_service.dart';
 
 http.Client _clientReturning({required String tag, int status = 200}) {
@@ -25,7 +28,9 @@ void main() {
       client: _clientReturning(tag: 'v1.2.0'),
       currentVersionLoader: () async => '1.1.0',
     );
-    final info = await service.checkForUpdate();
+    final info = await service.checkForUpdate(
+      channel: DesktopUpdateChannel.stable,
+    );
     expect(info, isNotNull);
     expect(info!.latestVersion, 'v1.2.0');
     expect(info.currentVersion, '1.1.0');
@@ -36,13 +41,19 @@ void main() {
       client: _clientReturning(tag: 'v1.1.0'),
       currentVersionLoader: () async => '1.1.0',
     );
-    expect(await same.checkForUpdate(), isNull);
+    expect(
+      await same.checkForUpdate(channel: DesktopUpdateChannel.stable),
+      isNull,
+    );
 
     final older = DesktopUpdateService(
       client: _clientReturning(tag: 'v1.0.0'),
       currentVersionLoader: () async => '1.1.0',
     );
-    expect(await older.checkForUpdate(), isNull);
+    expect(
+      await older.checkForUpdate(channel: DesktopUpdateChannel.stable),
+      isNull,
+    );
   });
 
   test('returns null on a non-200 response', () async {
@@ -50,7 +61,10 @@ void main() {
       client: _clientReturning(tag: 'v9.9.9', status: 404),
       currentVersionLoader: () async => '1.0.0',
     );
-    expect(await service.checkForUpdate(), isNull);
+    expect(
+      await service.checkForUpdate(channel: DesktopUpdateChannel.stable),
+      isNull,
+    );
   });
 
   test('returns null when the current version cannot be parsed', () async {
@@ -58,7 +72,10 @@ void main() {
       client: _clientReturning(tag: 'v2.0.0'),
       currentVersionLoader: () async => 'unknown',
     );
-    expect(await service.checkForUpdate(), isNull);
+    expect(
+      await service.checkForUpdate(channel: DesktopUpdateChannel.stable),
+      isNull,
+    );
   });
 
   test('captures the AppImage asset url when present', () async {
@@ -85,9 +102,176 @@ void main() {
       client: client,
       currentVersionLoader: () async => '1.0.0',
     );
-    final info = await service.checkForUpdate();
+    final info = await service.checkForUpdate(
+      channel: DesktopUpdateChannel.stable,
+    );
     expect(info, isNotNull);
-    expect(info!.appImageUrl, 'https://example.com/app.AppImage');
+    expect(info!.assetUrl, 'https://example.com/app.AppImage');
+  });
+
+  group('per-platform asset matching (#423)', () {
+    http.Client clientWithAssets(List<Map<String, Object>> assets) {
+      return MockClient((request) async {
+        return http.Response(
+          jsonEncode({
+            'tag_name': 'v2.0.0',
+            'html_url': 'https://example.com/releases/v2.0.0',
+            'assets': assets,
+          }),
+          200,
+        );
+      });
+    }
+
+    test('picks the Windows zip when running on Windows', () async {
+      final service = DesktopUpdateService(
+        client: clientWithAssets([
+          {
+            'name': 'SpectrumPit-macos.zip',
+            'browser_download_url': 'https://example.com/macos.zip',
+            'digest': 'sha256:${'b' * 64}',
+          },
+          {
+            'name': 'SpectrumPit-windows-x64.zip',
+            'browser_download_url': 'https://example.com/win.zip',
+            'digest': 'sha256:${'a' * 64}',
+          },
+        ]),
+        currentVersionLoader: () async => '1.0.0',
+        platformLoader: () => DesktopSelfUpdatePlatform.windows,
+      );
+      final info = await service.checkForUpdate(
+        channel: DesktopUpdateChannel.stable,
+      );
+      expect(info!.assetUrl, 'https://example.com/win.zip');
+
+      expect(info.expectedSha256, 'a' * 64);
+    });
+
+    test('picks the macOS zip when running on macOS', () async {
+      final service = DesktopUpdateService(
+        client: clientWithAssets([
+          {
+            'name': 'SpectrumPit-windows-x64.zip',
+            'browser_download_url': 'https://example.com/win.zip',
+          },
+          {
+            'name': 'SpectrumPit-macos.zip',
+            'browser_download_url': 'https://example.com/macos.zip',
+            'digest': 'sha256:${'c' * 64}',
+          },
+        ]),
+        currentVersionLoader: () async => '1.0.0',
+        platformLoader: () => DesktopSelfUpdatePlatform.macos,
+      );
+      final info = await service.checkForUpdate(
+        channel: DesktopUpdateChannel.stable,
+      );
+      expect(info!.assetUrl, 'https://example.com/macos.zip');
+      expect(info.expectedSha256, 'c' * 64);
+    });
+
+    test(
+      'finds no asset when the release has none for this platform',
+      () async {
+        final service = DesktopUpdateService(
+          client: clientWithAssets([
+            {
+              'name': 'SpectrumPit-linux-x86_64.AppImage',
+              'browser_download_url': 'https://example.com/app.AppImage',
+            },
+          ]),
+          currentVersionLoader: () async => '1.0.0',
+          platformLoader: () => DesktopSelfUpdatePlatform.windows,
+        );
+        final info = await service.checkForUpdate(
+          channel: DesktopUpdateChannel.stable,
+        );
+        expect(info, isNotNull);
+        expect(info!.assetUrl, isNull);
+        expect(info.expectedSha256, isNull);
+      },
+    );
+  });
+
+  group('multiple same-platform assets on the rolling release (#1331)', () {
+    http.Client clientWithTwoWindowsAssets() {
+      return MockClient((_) async {
+        return http.Response(
+          jsonEncode({
+            'tag_name': 'nightly',
+            'html_url': 'https://example.com/releases/nightly',
+            'assets': [
+              {
+                'name': 'SpectrumPit-windows-x64-11.zip',
+                'browser_download_url': 'https://example.com/win-11.zip',
+                'digest': 'sha256:${'1' * 64}',
+                'created_at': '2026-08-27T06:10:00Z',
+              },
+              {
+                'name': 'SpectrumPit-windows-x64-12.zip',
+                'browser_download_url': 'https://example.com/win-12.zip',
+                'digest': 'sha256:${'2' * 64}',
+                'created_at': '2026-08-28T06:10:00Z',
+              },
+            ],
+          }),
+          200,
+        );
+      });
+    }
+
+    test(
+      'picks the most recently created asset, not the first listed',
+      () async {
+        final service = DesktopUpdateService(
+          client: clientWithTwoWindowsAssets(),
+          currentVersionLoader: () async => '1.0.0',
+          platformLoader: () => DesktopSelfUpdatePlatform.windows,
+        );
+        final info = await service.checkForUpdate(
+          channel: DesktopUpdateChannel.nightly,
+        );
+        expect(info, isNotNull);
+        expect(info!.assetUrl, 'https://example.com/win-12.zip');
+        expect(info.expectedSha256, '2' * 64);
+      },
+    );
+
+    test('an asset with no created_at never displaces a dated one', () async {
+      final client = MockClient((_) async {
+        return http.Response(
+          jsonEncode({
+            'tag_name': 'nightly',
+            'html_url': 'https://example.com/releases/nightly',
+            'assets': [
+              {
+                'name': 'SpectrumPit-windows-x64-12.zip',
+                'browser_download_url': 'https://example.com/win-12.zip',
+                'digest': 'sha256:${'2' * 64}',
+                'created_at': '2026-08-28T06:10:00Z',
+              },
+              {
+                'name': 'SpectrumPit-windows-x64-13.zip',
+                'browser_download_url': 'https://example.com/win-13.zip',
+                'digest': 'sha256:${'3' * 64}',
+              },
+            ],
+          }),
+          200,
+        );
+      });
+      final service = DesktopUpdateService(
+        client: client,
+        currentVersionLoader: () async => '1.0.0',
+        platformLoader: () => DesktopSelfUpdatePlatform.windows,
+      );
+      final info = await service.checkForUpdate(
+        channel: DesktopUpdateChannel.nightly,
+      );
+      expect(info, isNotNull);
+      expect(info!.assetUrl, 'https://example.com/win-12.zip');
+    });
   });
 
   test(
@@ -114,7 +298,9 @@ void main() {
         repositories: const ['owner/primary', 'owner/fallback'],
       );
 
-      final info = await service.checkForUpdate();
+      final info = await service.checkForUpdate(
+        channel: DesktopUpdateChannel.stable,
+      );
 
       expect(requested, ['owner/primary', 'owner/fallback']);
       expect(info, isNotNull);
@@ -132,7 +318,7 @@ void main() {
     );
 
     await expectLater(
-      service.checkForUpdate(),
+      service.checkForUpdate(channel: DesktopUpdateChannel.stable),
       throwsA(isA<SocketException>()),
     );
   });
@@ -156,9 +342,207 @@ void main() {
       repositories: const ['owner/primary', 'owner/fallback'],
     );
 
-    final info = await service.checkForUpdate();
+    final info = await service.checkForUpdate(
+      channel: DesktopUpdateChannel.stable,
+    );
 
     expect(info, isNotNull);
     expect(info!.repository, 'owner/fallback');
+  });
+
+  group('update channel (#422)', () {
+    setUp(() {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+    });
+
+    test('defaults to stable when nothing is persisted', () async {
+      final service = DesktopUpdateService(
+        client: _clientReturning(tag: 'v1.0.0'),
+        currentVersionLoader: () async => '1.0.0',
+      );
+      expect(await service.currentChannel(), DesktopUpdateChannel.stable);
+    });
+
+    test(
+      'setChannel persists the choice for currentChannel to read back',
+      () async {
+        final service = DesktopUpdateService(
+          client: _clientReturning(tag: 'v1.0.0'),
+          currentVersionLoader: () async => '1.0.0',
+        );
+        await service.setChannel(DesktopUpdateChannel.nightly);
+        expect(await service.currentChannel(), DesktopUpdateChannel.nightly);
+
+        await service.setChannel(DesktopUpdateChannel.stable);
+        expect(await service.currentChannel(), DesktopUpdateChannel.stable);
+      },
+    );
+
+    test(
+      'checkForUpdate with no explicit channel reads the persisted one',
+      () async {
+        final service = DesktopUpdateService(
+          client: MockClient((request) async {
+            expect(
+              request.url.path,
+              '/repos/Spectrum3847/spectrum-pit/releases/tags/nightly',
+            );
+            return http.Response(
+              jsonEncode({
+                'tag_name': 'nightly',
+                'html_url': 'https://example.com/releases/nightly',
+              }),
+              200,
+            );
+          }),
+          currentVersionLoader: () async => '1.0.0',
+        );
+        await service.setChannel(DesktopUpdateChannel.nightly);
+        final info = await service.checkForUpdate();
+        expect(info?.latestVersion, 'nightly');
+      },
+    );
+  });
+
+  group('nightly channel', () {
+    test(
+      'reads the rolling nightly release, whose tag is not semver',
+      () async {
+        final service = DesktopUpdateService(
+          client: MockClient((request) async {
+            expect(
+              request.url.path,
+              '/repos/Spectrum3847/spectrum-pit/releases/tags/nightly',
+            );
+            return http.Response(
+              jsonEncode({
+                'tag_name': 'nightly',
+                'html_url': 'https://example.com/releases/nightly',
+                'assets': [
+                  {
+                    'name': 'SpectrumPit-linux-x86_64.AppImage',
+                    'browser_download_url':
+                        'https://example.com/nightly.AppImage',
+                  },
+                ],
+              }),
+              200,
+            );
+          }),
+          currentVersionLoader: () async => '1.0.0',
+        );
+        final info = await service.checkForUpdate(
+          channel: DesktopUpdateChannel.nightly,
+        );
+        expect(info, isNotNull);
+        expect(info!.latestVersion, 'nightly');
+        expect(info.assetUrl, 'https://example.com/nightly.AppImage');
+      },
+    );
+
+    test('is reported with no version gate', () async {
+      final service = DesktopUpdateService(
+        client: _clientReturning(tag: 'nightly'),
+        currentVersionLoader: () async => '9.9.9',
+      );
+      final info = await service.checkForUpdate(
+        channel: DesktopUpdateChannel.nightly,
+      );
+      expect(info, isNotNull);
+    });
+
+    test('reports nothing while the build is younger than 25 hours', () async {
+      var requested = false;
+      final service = DesktopUpdateService(
+        client: MockClient((_) async {
+          requested = true;
+          return http.Response('{}', 200);
+        }),
+        currentVersionLoader: () async => '1.0.0',
+        buildTimestamp: '2026-08-30T00:00:00Z',
+        now: () => DateTime.utc(2026, 8, 30, 20),
+      );
+      expect(
+        await service.checkForUpdate(channel: DesktopUpdateChannel.nightly),
+        isNull,
+      );
+      expect(requested, isFalse);
+    });
+
+    test('reports an update once the build is older than 25 hours', () async {
+      final service = DesktopUpdateService(
+        client: _clientReturning(tag: 'nightly'),
+        currentVersionLoader: () async => '1.0.0',
+        buildTimestamp: '2026-08-30T00:00:00Z',
+        now: () => DateTime.utc(2026, 8, 31, 2),
+      );
+      final info = await service.checkForUpdate(
+        channel: DesktopUpdateChannel.nightly,
+      );
+      expect(info?.latestVersion, 'nightly');
+    });
+
+    test('reports nothing when the build timestamp is in the future', () async {
+      final service = DesktopUpdateService(
+        client: _clientReturning(tag: 'nightly'),
+        currentVersionLoader: () async => '1.0.0',
+        buildTimestamp: '2026-08-31T00:00:00Z',
+        now: () => DateTime.utc(2026, 8, 30),
+      );
+      expect(
+        await service.checkForUpdate(channel: DesktopUpdateChannel.nightly),
+        isNull,
+      );
+    });
+
+    test(
+      'offers the nightly regardless of age when switching tracks',
+      () async {
+        final service = DesktopUpdateService(
+          client: _clientReturning(tag: 'nightly'),
+          currentVersionLoader: () async => '1.0.0',
+          buildTimestamp: '2026-08-30T00:00:00Z',
+          now: () => DateTime.utc(2026, 8, 30, 1),
+        );
+        final info = await service.checkForUpdate(
+          channel: DesktopUpdateChannel.nightly,
+          ignoreVersionGate: true,
+        );
+        expect(info?.latestVersion, 'nightly');
+      },
+    );
+
+    test('returns null when no nightly release exists yet', () async {
+      final service = DesktopUpdateService(
+        client: MockClient((_) async => http.Response('Not Found', 404)),
+        currentVersionLoader: () async => '1.0.0',
+      );
+      expect(
+        await service.checkForUpdate(channel: DesktopUpdateChannel.nightly),
+        isNull,
+      );
+    });
+  });
+
+  group('ignoreVersionGate (#422)', () {
+    setUp(() {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+    });
+
+    test('offers the stable release even when it is not newer', () async {
+      final service = DesktopUpdateService(
+        client: _clientReturning(tag: 'v1.0.0'),
+        currentVersionLoader: () async => '1.5.0',
+      );
+      expect(
+        await service.checkForUpdate(channel: DesktopUpdateChannel.stable),
+        isNull,
+      );
+      final info = await service.checkForUpdate(
+        channel: DesktopUpdateChannel.stable,
+        ignoreVersionGate: true,
+      );
+      expect(info?.latestVersion, 'v1.0.0');
+    });
   });
 }
