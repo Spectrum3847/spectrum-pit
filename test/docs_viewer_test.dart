@@ -5,7 +5,7 @@ import 'package:spectrumpit/src/models/user_role.dart';
 import 'package:spectrumpit/src/ui/docs_viewer_screen.dart';
 
 void main() {
-  testWidgets('docs tab lists grouped docs (developer sees all)', (
+  testWidgets('docs tab lists the bundled group (developer sees it too)', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1200, 4000);
@@ -21,13 +21,16 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Start here'), findsOneWidget);
-    expect(find.text('Developer reference'), findsOneWidget);
-    expect(find.text('Reference'), findsOneWidget);
     expect(find.text('Overview'), findsOneWidget);
 
-    expect(find.text('Developer Manual'), findsOneWidget);
-    expect(find.text('CI Workflows'), findsOneWidget);
-    expect(find.text('Upstream'), findsOneWidget);
+    // The mirror only bundles docs/README.md; the developer-only groups
+    // reference files that stay in the private repo, so they never appear
+    // here regardless of role.
+    expect(find.text('Developer reference'), findsNothing);
+    expect(find.text('Reference'), findsNothing);
+    expect(find.text('Developer Manual'), findsNothing);
+    expect(find.text('CI Workflows'), findsNothing);
+    expect(find.text('Upstream'), findsNothing);
   });
 
   testWidgets('docs are role-filtered: a pit member sees only member docs', (
