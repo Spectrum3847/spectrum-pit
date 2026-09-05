@@ -1,0 +1,68 @@
+name: spectrumpit
+description: "FRC pit logistics app. Ships to iOS, Android, and desktop."
+
+publish_to: 'none'
+
+version: 1.9.0-dev+1
+
+environment:
+  sdk: ^3.13.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  google_fonts: ^8.2.1
+  cloud_firestore: ^6.9.0
+  firebase_auth: ^6.6.1
+  firebase_core: ^4.14.0
+  cloud_functions: ^6.4.0
+  google_sign_in: ^7.2.0
+  http: ^1.2.2
+
+  firestore_client:
+    git:
+      url: https://github.com/Project516/firestore_client.git
+      ref: v0.4.0
+  shared_preferences: ^2.5.5
+  uuid: ^4.6.0
+  package_info_plus: ^10.2.1
+  device_info_plus: ^13.2.0
+  flutter_markdown_plus: ^1.0.12
+  url_launcher: ^6.3.1
+
+  file_selector: ^1.0.3
+  path_provider: ^2.1.6
+
+  image_picker: ^1.2.3
+  pub_semver: ^2.2.1
+  crypto: ^3.0.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  fake_cloud_firestore: ^4.2.0
+  firebase_auth_mocks: ^0.15.1
+  flutter_lints: ^6.0.0
+  google_sign_in_platform_interface: ^3.1.0
+  plugin_platform_interface: ^2.1.8
+
+flutter:
+
+  uses-material-design: true
+  assets:
+    - docs/
+  fonts:
+    - family: IBM Plex Sans
+      fonts:
+        - asset: assets/fonts/IBMPlexSans-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/IBMPlexSans-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/IBMPlexSans-Bold.ttf
+          weight: 700
+    - family: IBM Plex Mono
+      fonts:
+        - asset: assets/fonts/IBMPlexMono-Medium.ttf
+          weight: 500
