@@ -196,7 +196,8 @@ jobs:
             --build-number "$(( 1000 + GITHUB_RUN_NUMBER ))" \
             --dart-define=GIT_COMMIT="$SOURCE_SHA" \
             --dart-define=GIT_BRANCH="master" \
-            --dart-define=BUILD_DATE="$build_date"
+            --dart-define=BUILD_DATE="$build_date" \
+            --dart-define=SPECTRUM_APP_KEY=spectrumpit
 
       - name: Package IPA
         id: package
@@ -347,6 +348,35 @@ jobs:
           printf '%s' "$GOOGLE_SERVICES_JSON" | base64 --decode \
             > android/app/google-services.json
 
+          python3 - <<'CHECK'
+          import json, sys
+          config = json.load(open("android/app/google-services.json"))
+          clients = [
+              oauth
+              for client in config.get("client", [])
+              for oauth in client.get("oauth_client", [])
+          ]
+          if not any(oauth.get("client_type") == 3 for oauth in clients):
+              sys.exit(
+                  "google-services.json has no web (type 3) OAuth client, so "
+                  "this build cannot sign in. Re-export it from the Firebase "
+                  "console and update the GOOGLE_SERVICES_JSON secret."
+              )
+          CHECK
+
+      - name: Write the nightly debug keystore
+        env:
+          ANDROID_NIGHTLY_DEBUG_KEYSTORE: ${{ secrets.ANDROID_NIGHTLY_DEBUG_KEYSTORE }}
+        run: |
+          if [ -z "$ANDROID_NIGHTLY_DEBUG_KEYSTORE" ]; then
+            echo "No nightly debug keystore secret; using the runner's." >&2
+            echo "Google sign-in will not work on this build." >&2
+            exit 0
+          fi
+          mkdir -p "$HOME/.android"
+          printf '%s' "$ANDROID_NIGHTLY_DEBUG_KEYSTORE" | base64 --decode \
+            > "$HOME/.android/debug.keystore"
+
       - name: Build debug APK
         run: |
           BUILD_NUMBER="$(( 1000 + GITHUB_RUN_NUMBER ))"
@@ -357,7 +387,8 @@ jobs:
             --build-number "$BUILD_NUMBER" \
             --dart-define=GIT_COMMIT="$SOURCE_SHA" \
             --dart-define=GIT_BRANCH="master" \
-            --dart-define=BUILD_DATE="$build_date"
+            --dart-define=BUILD_DATE="$build_date" \
+            --dart-define=SPECTRUM_APP_KEY=spectrumpit
 
       - name: Publish to the rolling nightly release
 
@@ -440,7 +471,8 @@ jobs:
               --dart-define=BUILD_DATE="$build_date" \
               --dart-define=BUILD_TIMESTAMP="$build_timestamp" \
               --dart-define=GOOGLE_OAUTH_CLIENT_ID="${GOOGLE_OAUTH_CLIENT_ID}" \
-              --dart-define=GOOGLE_OAUTH_CLIENT_SECRET="${GOOGLE_OAUTH_CLIENT_SECRET}"
+              --dart-define=GOOGLE_OAUTH_CLIENT_SECRET="${GOOGLE_OAUTH_CLIENT_SECRET}" \
+              --dart-define=SPECTRUM_APP_KEY=spectrumpit
           }
           for attempt in 1 2 3; do
             if build; then exit 0; fi
@@ -559,7 +591,8 @@ jobs:
           flutter pub get
           build_date="$(date -u +%Y-%m-%d)"
           flutter build web --release --wasm --base-href / \
-            --dart-define=BUILD_DATE="$build_date"
+            --dart-define=BUILD_DATE="$build_date" \
+            --dart-define=SPECTRUM_APP_KEY=spectrumpit
 
       - name: Deploy to the staging Hosting site
         env:
