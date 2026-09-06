@@ -28,12 +28,12 @@ void main() {
       client: _clientReturning(tag: 'v1.2.0'),
       currentVersionLoader: () async => '1.1.0',
     );
-    final info = await service.checkForUpdate(
+    final check = await service.checkForUpdate(
       channel: DesktopUpdateChannel.stable,
     );
-    expect(info, isNotNull);
-    expect(info!.latestVersion, 'v1.2.0');
-    expect(info.currentVersion, '1.1.0');
+    expect(check.update, isNotNull);
+    expect(check.update!.latestVersion, 'v1.2.0');
+    expect(check.update!.currentVersion, '1.1.0');
   });
 
   test('reports no update when the release is the same or older', () async {
@@ -42,7 +42,7 @@ void main() {
       currentVersionLoader: () async => '1.1.0',
     );
     expect(
-      await same.checkForUpdate(channel: DesktopUpdateChannel.stable),
+      (await same.checkForUpdate(channel: DesktopUpdateChannel.stable)).update,
       isNull,
     );
 
@@ -51,32 +51,52 @@ void main() {
       currentVersionLoader: () async => '1.1.0',
     );
     expect(
-      await older.checkForUpdate(channel: DesktopUpdateChannel.stable),
+      (await older.checkForUpdate(channel: DesktopUpdateChannel.stable)).update,
       isNull,
     );
   });
 
-  test('returns null on a non-200 response', () async {
+  test(
+    'a not-newer stable release reports up to date, not no release',
+    () async {
+      final service = DesktopUpdateService(
+        client: _clientReturning(tag: 'v1.1.0'),
+        currentVersionLoader: () async => '1.1.0',
+      );
+      final check = await service.checkForUpdate(
+        channel: DesktopUpdateChannel.stable,
+      );
+      expect(check.update, isNull);
+      expect(check.hasRelease, isTrue);
+    },
+  );
+
+  test('returns no release on a non-200 response', () async {
     final service = DesktopUpdateService(
       client: _clientReturning(tag: 'v9.9.9', status: 404),
       currentVersionLoader: () async => '1.0.0',
     );
-    expect(
-      await service.checkForUpdate(channel: DesktopUpdateChannel.stable),
-      isNull,
+    final check = await service.checkForUpdate(
+      channel: DesktopUpdateChannel.stable,
     );
+    expect(check.update, isNull);
+    expect(check.hasRelease, isFalse);
   });
 
-  test('returns null when the current version cannot be parsed', () async {
-    final service = DesktopUpdateService(
-      client: _clientReturning(tag: 'v2.0.0'),
-      currentVersionLoader: () async => 'unknown',
-    );
-    expect(
-      await service.checkForUpdate(channel: DesktopUpdateChannel.stable),
-      isNull,
-    );
-  });
+  test(
+    'returns up to date when the current version cannot be parsed',
+    () async {
+      final service = DesktopUpdateService(
+        client: _clientReturning(tag: 'v2.0.0'),
+        currentVersionLoader: () async => 'unknown',
+      );
+      final check = await service.checkForUpdate(
+        channel: DesktopUpdateChannel.stable,
+      );
+      expect(check.update, isNull);
+      expect(check.hasRelease, isTrue);
+    },
+  );
 
   test('captures the AppImage asset url when present', () async {
     final client = MockClient((request) async {
@@ -102,11 +122,11 @@ void main() {
       client: client,
       currentVersionLoader: () async => '1.0.0',
     );
-    final info = await service.checkForUpdate(
+    final check = await service.checkForUpdate(
       channel: DesktopUpdateChannel.stable,
     );
-    expect(info, isNotNull);
-    expect(info!.assetUrl, 'https://example.com/app.AppImage');
+    expect(check.update, isNotNull);
+    expect(check.update!.assetUrl, 'https://example.com/app.AppImage');
   });
 
   group('per-platform asset matching (#423)', () {
@@ -140,12 +160,12 @@ void main() {
         currentVersionLoader: () async => '1.0.0',
         platformLoader: () => DesktopSelfUpdatePlatform.windows,
       );
-      final info = await service.checkForUpdate(
+      final check = await service.checkForUpdate(
         channel: DesktopUpdateChannel.stable,
       );
-      expect(info!.assetUrl, 'https://example.com/win.zip');
+      expect(check.update!.assetUrl, 'https://example.com/win.zip');
 
-      expect(info.expectedSha256, 'a' * 64);
+      expect(check.update!.expectedSha256, 'a' * 64);
     });
 
     test('picks the macOS zip when running on macOS', () async {
@@ -164,11 +184,11 @@ void main() {
         currentVersionLoader: () async => '1.0.0',
         platformLoader: () => DesktopSelfUpdatePlatform.macos,
       );
-      final info = await service.checkForUpdate(
+      final check = await service.checkForUpdate(
         channel: DesktopUpdateChannel.stable,
       );
-      expect(info!.assetUrl, 'https://example.com/macos.zip');
-      expect(info.expectedSha256, 'c' * 64);
+      expect(check.update!.assetUrl, 'https://example.com/macos.zip');
+      expect(check.update!.expectedSha256, 'c' * 64);
     });
 
     test(
@@ -184,12 +204,12 @@ void main() {
           currentVersionLoader: () async => '1.0.0',
           platformLoader: () => DesktopSelfUpdatePlatform.windows,
         );
-        final info = await service.checkForUpdate(
+        final check = await service.checkForUpdate(
           channel: DesktopUpdateChannel.stable,
         );
-        expect(info, isNotNull);
-        expect(info!.assetUrl, isNull);
-        expect(info.expectedSha256, isNull);
+        expect(check.update, isNotNull);
+        expect(check.update!.assetUrl, isNull);
+        expect(check.update!.expectedSha256, isNull);
       },
     );
   });
@@ -229,12 +249,12 @@ void main() {
           currentVersionLoader: () async => '1.0.0',
           platformLoader: () => DesktopSelfUpdatePlatform.windows,
         );
-        final info = await service.checkForUpdate(
+        final check = await service.checkForUpdate(
           channel: DesktopUpdateChannel.nightly,
         );
-        expect(info, isNotNull);
-        expect(info!.assetUrl, 'https://example.com/win-12.zip');
-        expect(info.expectedSha256, '2' * 64);
+        expect(check.update, isNotNull);
+        expect(check.update!.assetUrl, 'https://example.com/win-12.zip');
+        expect(check.update!.expectedSha256, '2' * 64);
       },
     );
 
@@ -266,11 +286,11 @@ void main() {
         currentVersionLoader: () async => '1.0.0',
         platformLoader: () => DesktopSelfUpdatePlatform.windows,
       );
-      final info = await service.checkForUpdate(
+      final check = await service.checkForUpdate(
         channel: DesktopUpdateChannel.nightly,
       );
-      expect(info, isNotNull);
-      expect(info!.assetUrl, 'https://example.com/win-12.zip');
+      expect(check.update, isNotNull);
+      expect(check.update!.assetUrl, 'https://example.com/win-12.zip');
     });
   });
 
@@ -298,14 +318,14 @@ void main() {
         repositories: const ['owner/primary', 'owner/fallback'],
       );
 
-      final info = await service.checkForUpdate(
+      final check = await service.checkForUpdate(
         channel: DesktopUpdateChannel.stable,
       );
 
       expect(requested, ['owner/primary', 'owner/fallback']);
-      expect(info, isNotNull);
-      expect(info!.latestVersion, 'v2.0.0');
-      expect(info.repository, 'owner/fallback');
+      expect(check.update, isNotNull);
+      expect(check.update!.latestVersion, 'v2.0.0');
+      expect(check.update!.repository, 'owner/fallback');
     },
   );
 
@@ -321,6 +341,33 @@ void main() {
       service.checkForUpdate(channel: DesktopUpdateChannel.stable),
       throwsA(isA<SocketException>()),
     );
+  });
+
+  test('a transport failure is swallowed once another answered', () async {
+    final client = MockClient((request) async {
+      if (request.url.path.contains('owner/primary')) {
+        throw const SocketException('no route to host');
+      }
+      return http.Response(
+        jsonEncode({
+          'tag_name': 'v1.0.0',
+          'html_url': 'https://example.com/releases/v1.0.0',
+        }),
+        200,
+      );
+    });
+    final service = DesktopUpdateService(
+      client: client,
+      currentVersionLoader: () async => '1.5.0',
+      repositories: const ['owner/primary', 'owner/fallback'],
+    );
+
+    final check = await service.checkForUpdate(
+      channel: DesktopUpdateChannel.stable,
+    );
+
+    expect(check.update, isNull);
+    expect(check.hasRelease, isTrue);
   });
 
   test('one unreachable repository does not hide a newer one', () async {
@@ -342,12 +389,12 @@ void main() {
       repositories: const ['owner/primary', 'owner/fallback'],
     );
 
-    final info = await service.checkForUpdate(
+    final check = await service.checkForUpdate(
       channel: DesktopUpdateChannel.stable,
     );
 
-    expect(info, isNotNull);
-    expect(info!.repository, 'owner/fallback');
+    expect(check.update, isNotNull);
+    expect(check.update!.repository, 'owner/fallback');
   });
 
   group('update channel (#422)', () {
@@ -398,8 +445,8 @@ void main() {
           currentVersionLoader: () async => '1.0.0',
         );
         await service.setChannel(DesktopUpdateChannel.nightly);
-        final info = await service.checkForUpdate();
-        expect(info?.latestVersion, 'nightly');
+        final check = await service.checkForUpdate();
+        expect(check.update?.latestVersion, 'nightly');
       },
     );
   });
@@ -431,12 +478,12 @@ void main() {
           }),
           currentVersionLoader: () async => '1.0.0',
         );
-        final info = await service.checkForUpdate(
+        final check = await service.checkForUpdate(
           channel: DesktopUpdateChannel.nightly,
         );
-        expect(info, isNotNull);
-        expect(info!.latestVersion, 'nightly');
-        expect(info.assetUrl, 'https://example.com/nightly.AppImage');
+        expect(check.update, isNotNull);
+        expect(check.update!.latestVersion, 'nightly');
+        expect(check.update!.assetUrl, 'https://example.com/nightly.AppImage');
       },
     );
 
@@ -445,13 +492,13 @@ void main() {
         client: _clientReturning(tag: 'nightly'),
         currentVersionLoader: () async => '9.9.9',
       );
-      final info = await service.checkForUpdate(
+      final check = await service.checkForUpdate(
         channel: DesktopUpdateChannel.nightly,
       );
-      expect(info, isNotNull);
+      expect(check.update, isNotNull);
     });
 
-    test('reports nothing while the build is younger than 25 hours', () async {
+    test('reports nothing while the build is younger than 4 hours', () async {
       var requested = false;
       final service = DesktopUpdateService(
         client: MockClient((_) async {
@@ -460,68 +507,134 @@ void main() {
         }),
         currentVersionLoader: () async => '1.0.0',
         buildTimestamp: '2026-08-30T00:00:00Z',
-        now: () => DateTime.utc(2026, 8, 30, 20),
+        now: () => DateTime.utc(2026, 8, 30, 2),
       );
-      expect(
-        await service.checkForUpdate(channel: DesktopUpdateChannel.nightly),
-        isNull,
+      final check = await service.checkForUpdate(
+        channel: DesktopUpdateChannel.nightly,
       );
+      expect(check.update, isNull);
+      expect(check.hasRelease, isTrue);
       expect(requested, isFalse);
     });
 
-    test('reports an update once the build is older than 25 hours', () async {
+    test('reports nothing just inside the freshness window', () async {
+      var requested = false;
+      final service = DesktopUpdateService(
+        client: MockClient((_) async {
+          requested = true;
+          return http.Response('{}', 200);
+        }),
+        currentVersionLoader: () async => '1.0.0',
+        buildTimestamp: '2026-08-30T00:00:00Z',
+        now: () => DateTime.utc(2026, 8, 30, 3, 59, 59),
+      );
+      final check = await service.checkForUpdate(
+        channel: DesktopUpdateChannel.nightly,
+      );
+      expect(check.update, isNull);
+      expect(check.hasRelease, isTrue);
+      expect(requested, isFalse);
+    });
+
+    test('reports an update once the build is older than 4 hours', () async {
       final service = DesktopUpdateService(
         client: _clientReturning(tag: 'nightly'),
         currentVersionLoader: () async => '1.0.0',
         buildTimestamp: '2026-08-30T00:00:00Z',
-        now: () => DateTime.utc(2026, 8, 31, 2),
+        now: () => DateTime.utc(2026, 8, 30, 4, 0, 1),
       );
-      final info = await service.checkForUpdate(
+      final check = await service.checkForUpdate(
         channel: DesktopUpdateChannel.nightly,
       );
-      expect(info?.latestVersion, 'nightly');
-    });
-
-    test('reports nothing when the build timestamp is in the future', () async {
-      final service = DesktopUpdateService(
-        client: _clientReturning(tag: 'nightly'),
-        currentVersionLoader: () async => '1.0.0',
-        buildTimestamp: '2026-08-31T00:00:00Z',
-        now: () => DateTime.utc(2026, 8, 30),
-      );
-      expect(
-        await service.checkForUpdate(channel: DesktopUpdateChannel.nightly),
-        isNull,
-      );
+      expect(check.update?.latestVersion, 'nightly');
     });
 
     test(
-      'offers the nightly regardless of age when switching tracks',
+      'treats a future build timestamp as fresh and reports up to date',
+      () async {
+        var requested = false;
+        final service = DesktopUpdateService(
+          client: MockClient((_) async {
+            requested = true;
+            return http.Response('{}', 200);
+          }),
+          currentVersionLoader: () async => '1.0.0',
+          buildTimestamp: '2026-08-31T00:00:00Z',
+          now: () => DateTime.utc(2026, 8, 30),
+        );
+        final check = await service.checkForUpdate(
+          channel: DesktopUpdateChannel.nightly,
+        );
+        expect(check.update, isNull);
+        expect(check.hasRelease, isTrue);
+        expect(requested, isFalse);
+      },
+    );
+
+    test('an empty build timestamp is treated as stale and offered', () async {
+      final service = DesktopUpdateService(
+        client: _clientReturning(tag: 'nightly'),
+        currentVersionLoader: () async => '1.0.0',
+        buildTimestamp: '',
+        now: () => DateTime.utc(2026, 8, 30),
+      );
+      final check = await service.checkForUpdate(
+        channel: DesktopUpdateChannel.nightly,
+      );
+      expect(check.update?.latestVersion, 'nightly');
+    });
+
+    test(
+      'a fresh nightly is up to date regardless of ignoreVersionGate',
+      () async {
+        var requested = false;
+        final service = DesktopUpdateService(
+          client: MockClient((_) async {
+            requested = true;
+            return http.Response('{}', 200);
+          }),
+          currentVersionLoader: () async => '1.0.0',
+          buildTimestamp: '2026-08-30T00:00:00Z',
+          now: () => DateTime.utc(2026, 8, 30, 1),
+        );
+        final check = await service.checkForUpdate(
+          channel: DesktopUpdateChannel.nightly,
+          ignoreVersionGate: true,
+        );
+        expect(check.update, isNull);
+        expect(check.hasRelease, isTrue);
+        expect(requested, isFalse);
+      },
+    );
+
+    test('returns no release when no nightly release exists yet', () async {
+      final service = DesktopUpdateService(
+        client: MockClient((_) async => http.Response('Not Found', 404)),
+        currentVersionLoader: () async => '1.0.0',
+      );
+      final check = await service.checkForUpdate(
+        channel: DesktopUpdateChannel.nightly,
+      );
+      expect(check.update, isNull);
+      expect(check.hasRelease, isFalse);
+    });
+
+    test(
+      'a stale nightly with a release reports hasRelease and an update',
       () async {
         final service = DesktopUpdateService(
           client: _clientReturning(tag: 'nightly'),
           currentVersionLoader: () async => '1.0.0',
           buildTimestamp: '2026-08-30T00:00:00Z',
-          now: () => DateTime.utc(2026, 8, 30, 1),
+          now: () => DateTime.utc(2026, 8, 31, 2),
         );
-        final info = await service.checkForUpdate(
+        final check = await service.checkForUpdate(
           channel: DesktopUpdateChannel.nightly,
-          ignoreVersionGate: true,
         );
-        expect(info?.latestVersion, 'nightly');
+        expect(check.hasRelease, isTrue);
+        expect(check.update, isNotNull);
       },
     );
-
-    test('returns null when no nightly release exists yet', () async {
-      final service = DesktopUpdateService(
-        client: MockClient((_) async => http.Response('Not Found', 404)),
-        currentVersionLoader: () async => '1.0.0',
-      );
-      expect(
-        await service.checkForUpdate(channel: DesktopUpdateChannel.nightly),
-        isNull,
-      );
-    });
   });
 
   group('ignoreVersionGate (#422)', () {
@@ -535,14 +648,29 @@ void main() {
         currentVersionLoader: () async => '1.5.0',
       );
       expect(
-        await service.checkForUpdate(channel: DesktopUpdateChannel.stable),
+        (await service.checkForUpdate(channel: DesktopUpdateChannel.stable))
+            .update,
         isNull,
       );
-      final info = await service.checkForUpdate(
+      final check = await service.checkForUpdate(
         channel: DesktopUpdateChannel.stable,
         ignoreVersionGate: true,
       );
-      expect(info?.latestVersion, 'v1.0.0');
+      expect(check.update?.latestVersion, 'v1.0.0');
+    });
+
+    test('reports up to date, not an update, when switching to a track '
+        'already running its newest release', () async {
+      final service = DesktopUpdateService(
+        client: _clientReturning(tag: 'v1.8.0'),
+        currentVersionLoader: () async => '1.8.0',
+      );
+      final check = await service.checkForUpdate(
+        channel: DesktopUpdateChannel.stable,
+        ignoreVersionGate: true,
+      );
+      expect(check.update, isNull);
+      expect(check.hasRelease, isTrue);
     });
   });
 }

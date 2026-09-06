@@ -123,6 +123,28 @@ class GenerateSourceTest(unittest.TestCase):
         self.assertEqual(len(versions), 1)
         self.assertEqual(versions[0]["version"], "1.2.0")
 
+    def test_wrong_shaped_existing_source_is_treated_as_no_history(self):
+
+        for name, payload in (
+            ("app_not_a_mapping", '{"apps":[null]}'),
+            ("versions_not_a_list", '{"apps":[{"versions":null}]}'),
+            ("versions_entry_not_a_mapping", '{"apps":[{"versions":[null]}]}'),
+        ):
+            with self.subTest(name):
+                bad = self.tmp_path / f"{name}.json"
+                bad.write_text(payload, encoding="utf-8")
+
+                self.assertEqual(
+                    generate_source.load_existing_versions(str(bad)), []
+                )
+
+                args = make_args(self.ipa, existing=str(bad))
+                source = generate_source.build_source(args)
+                versions = source["apps"][0]["versions"]
+
+                self.assertEqual(len(versions), 1)
+                self.assertEqual(versions[0]["version"], "1.2.0")
+
     def test_missing_existing_source_is_treated_as_no_history(self):
         missing = str(self.tmp_path / "does-not-exist.json")
 

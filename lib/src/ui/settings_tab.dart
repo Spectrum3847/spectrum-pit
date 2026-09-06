@@ -89,81 +89,84 @@ class _SettingsTabState extends State<SettingsTab> {
           title: const Text('Report a problem'),
           content: SizedBox(
             width: double.maxFinite,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'Your name and device details are attached automatically '
-                  'to help us debug.',
-                  style: Theme.of(ctx).textTheme.bodySmall,
-                ),
-                const SizedBox(height: 12),
-                SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(value: 'bug', label: Text('Bug')),
-                    ButtonSegment(value: 'feedback', label: Text('Feedback')),
-                  ],
-                  selected: {kind},
-                  onSelectionChanged: (selection) =>
-                      setDialogState(() => kind = selection.first),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: area,
-                  decoration: const InputDecoration(
-                    labelText: 'Area',
-                    border: OutlineInputBorder(),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Your name and device details are attached automatically '
+                    'to help us debug.',
+                    style: Theme.of(ctx).textTheme.bodySmall,
                   ),
-                  items: [
-                    for (final option in _reportAreas)
-                      DropdownMenuItem(value: option, child: Text(option)),
-                  ],
-                  onChanged: (value) => setDialogState(() => area = value),
-                ),
-                if (kind == 'bug') ...[
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
+                  SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(value: 'bug', label: Text('Bug')),
+                      ButtonSegment(value: 'feedback', label: Text('Feedback')),
+                    ],
+                    selected: {kind},
+                    onSelectionChanged: (selection) =>
+                        setDialogState(() => kind = selection.first),
+                  ),
+                  const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    initialValue: impact,
+                    initialValue: area,
                     decoration: const InputDecoration(
-                      labelText: 'Impact',
+                      labelText: 'Area',
                       border: OutlineInputBorder(),
                     ),
                     items: [
-                      for (final option in _reportImpacts)
+                      for (final option in _reportAreas)
                         DropdownMenuItem(value: option, child: Text(option)),
                     ],
-                    onChanged: (value) => setDialogState(() => impact = value),
+                    onChanged: (value) => setDialogState(() => area = value),
+                  ),
+                  if (kind == 'bug') ...[
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      initialValue: impact,
+                      decoration: const InputDecoration(
+                        labelText: 'Impact',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: [
+                        for (final option in _reportImpacts)
+                          DropdownMenuItem(value: option, child: Text(option)),
+                      ],
+                      onChanged: (value) =>
+                          setDialogState(() => impact = value),
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: titleCtrl,
+                    textCapitalization: TextCapitalization.sentences,
+                    maxLength: 200,
+                    decoration: const InputDecoration(
+                      labelText: 'Summary',
+                      hintText: 'Something did not work',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: bodyCtrl,
+                    maxLines: 5,
+                    maxLength: 4096,
+                    textCapitalization: TextCapitalization.sentences,
+                    decoration: InputDecoration(
+                      labelText: kind == 'feedback'
+                          ? 'Your feedback'
+                          : 'What happened',
+                      hintText: kind == 'feedback'
+                          ? 'What would you like to see?'
+                          : 'Steps to reproduce, what you expected, etc.',
+                      border: const OutlineInputBorder(),
+                    ),
                   ),
                 ],
-                const SizedBox(height: 8),
-                TextField(
-                  controller: titleCtrl,
-                  textCapitalization: TextCapitalization.sentences,
-                  maxLength: 200,
-                  decoration: const InputDecoration(
-                    labelText: 'Summary',
-                    hintText: 'Something did not work',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: bodyCtrl,
-                  maxLines: 5,
-                  maxLength: 4096,
-                  textCapitalization: TextCapitalization.sentences,
-                  decoration: InputDecoration(
-                    labelText: kind == 'feedback'
-                        ? 'Your feedback'
-                        : 'What happened',
-                    hintText: kind == 'feedback'
-                        ? 'What would you like to see?'
-                        : 'Steps to reproduce, what you expected, etc.',
-                    border: const OutlineInputBorder(),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
           actions: [
@@ -465,8 +468,16 @@ class _WebChannelTileState extends State<_WebChannelTile> {
     setState(
       () => _status = 'Opening the ${channel.label.toLowerCase()} site...',
     );
-    await launchUrl(channel.url, webOnlyWindowName: '_self');
-    if (mounted) setState(() => _switching = false);
+    final launched = await launchUrl(channel.url, webOnlyWindowName: '_self');
+    if (!mounted) return;
+    setState(() {
+      _switching = false;
+      if (!launched) {
+        _status =
+            'Could not open the ${channel.label.toLowerCase()} site. '
+            'Try again, or navigate to it directly.';
+      }
+    });
   }
 
   @override
@@ -523,9 +534,14 @@ class _DesktopUpdateTileState extends State<_DesktopUpdateTile> {
   @override
   void initState() {
     super.initState();
-    _service.currentChannel().then((channel) {
-      if (mounted) setState(() => _channel = channel);
-    });
+    _service
+        .currentChannel()
+        .then((channel) {
+          if (mounted) setState(() => _channel = channel);
+        })
+        .catchError((Object error) {
+          debugPrint('Update channel read failed: $error');
+        });
   }
 
   bool get _canInstall =>
@@ -538,13 +554,12 @@ class _DesktopUpdateTileState extends State<_DesktopUpdateTile> {
       _update = null;
     });
     try {
-      final info = await _service.checkForUpdate();
+      final channel = await _service.currentChannel();
+      final result = await _service.checkForUpdate(channel: channel);
       if (!mounted) return;
       setState(() {
-        _update = info;
-        _status = info == null
-            ? 'You are on the latest version.'
-            : 'Update available: ${info.latestVersion}.';
+        _channel = channel;
+        _applyResult(result, channel);
       });
     } catch (_) {
       if (!mounted) return;
@@ -563,22 +578,30 @@ class _DesktopUpdateTileState extends State<_DesktopUpdateTile> {
     });
     try {
       await _service.setChannel(channel);
-      final info = await _service.checkForUpdate(
+      final result = await _service.checkForUpdate(
         channel: channel,
         ignoreVersionGate: true,
       );
       if (!mounted) return;
-      setState(() {
-        _update = info;
-        _status = info == null
-            ? 'You are on the latest version.'
-            : 'Update available: ${info.latestVersion}.';
-      });
+      setState(() => _applyResult(result, channel));
     } catch (_) {
       if (!mounted) return;
       setState(() => _status = 'Could not check for updates right now.');
     } finally {
       if (mounted) setState(() => _checking = false);
+    }
+  }
+
+  void _applyResult(DesktopUpdateCheck result, DesktopUpdateChannel channel) {
+    _update = result.update;
+    if (result.update != null) {
+      _status = 'Update available: ${result.update!.latestVersion}.';
+    } else if (result.hasRelease) {
+      _status = 'You are on the latest version.';
+    } else {
+      _status =
+          'No ${channel.name} build has been published yet, so there is '
+          'nothing to update to.';
     }
   }
 

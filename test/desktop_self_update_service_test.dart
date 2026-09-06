@@ -156,36 +156,117 @@ void main() {
     );
   });
 
-  test(
-    'update rejects a redirect response without touching the target',
-    () async {
-      final dir = Directory.systemTemp.createTempSync('selfupdate');
-      addTearDown(() => dir.deleteSync(recursive: true));
-      final target = File('${dir.path}/App.AppImage')
-        ..writeAsBytesSync([1, 2, 3]);
-      final service = DesktopSelfUpdateService(
-        client: MockClient(
-          (_) async => http.Response(
+  test('update rejects a redirect to a non-https URL without touching the '
+      'target', () async {
+    final dir = Directory.systemTemp.createTempSync('selfupdate');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final target = File('${dir.path}/App.AppImage')
+      ..writeAsBytesSync([1, 2, 3]);
+    final service = DesktopSelfUpdateService(
+      client: MockClient(
+        (_) async => http.Response(
+          'moved',
+          302,
+          headers: {'location': 'http://insecure.example.com/App.AppImage'},
+        ),
+      ),
+      appImagePathLoader: () => target.path,
+      makeExecutable: (_) async {},
+      relaunch: (_) async {},
+    );
+
+    await expectLater(
+      service.update(
+        Uri.parse('https://example.com/App.AppImage'),
+        expectedSha256: '0' * 64,
+      ),
+      throwsStateError,
+    );
+    expect(target.readAsBytesSync(), [1, 2, 3]);
+  });
+
+  test('update follows an https redirect and installs the payload', () async {
+    final dir = Directory.systemTemp.createTempSync('selfupdate');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final target = File('${dir.path}/App.AppImage')..writeAsBytesSync([0]);
+    final payload = List<int>.filled(200000, 66);
+    var madeExec = '';
+    var relaunched = '';
+    final service = DesktopSelfUpdateService(
+      client: MockClient((request) async {
+        if (request.url.host == 'example.com') {
+          return http.Response(
             'moved',
             302,
-            headers: {'location': 'http://insecure.example.com/App.AppImage'},
-          ),
-        ),
-        appImagePathLoader: () => target.path,
-        makeExecutable: (_) async {},
-        relaunch: (_) async {},
-      );
+            headers: {'location': 'https://cdn.example.com/App.AppImage'},
+          );
+        }
+        return http.Response.bytes(payload, 200);
+      }),
+      appImagePathLoader: () => target.path,
+      makeExecutable: (p) async => madeExec = p,
+      relaunch: (p) async => relaunched = p,
+    );
 
-      await expectLater(
-        service.update(
-          Uri.parse('https://example.com/App.AppImage'),
-          expectedSha256: '0' * 64,
-        ),
-        throwsStateError,
-      );
-      expect(target.readAsBytesSync(), [1, 2, 3]);
-    },
-  );
+    await service.update(
+      Uri.parse('https://example.com/App.AppImage'),
+      expectedSha256: sha256.convert(payload).toString(),
+    );
+
+    expect(target.readAsBytesSync(), payload);
+    expect(madeExec, '${target.path}.new');
+    expect(relaunched, target.path);
+  });
+
+  test('update throws when a redirect has no location header', () async {
+    final dir = Directory.systemTemp.createTempSync('selfupdate');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final target = File('${dir.path}/App.AppImage')
+      ..writeAsBytesSync([1, 2, 3]);
+    final service = DesktopSelfUpdateService(
+      client: MockClient((_) async => http.Response('moved', 302)),
+      appImagePathLoader: () => target.path,
+      makeExecutable: (_) async {},
+      relaunch: (_) async {},
+    );
+
+    await expectLater(
+      service.update(
+        Uri.parse('https://example.com/App.AppImage'),
+        expectedSha256: '0' * 64,
+      ),
+      throwsStateError,
+    );
+    expect(target.readAsBytesSync(), [1, 2, 3]);
+  });
+
+  test('update throws instead of hanging on a redirect loop', () async {
+    final dir = Directory.systemTemp.createTempSync('selfupdate');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final target = File('${dir.path}/App.AppImage')
+      ..writeAsBytesSync([1, 2, 3]);
+    final service = DesktopSelfUpdateService(
+      client: MockClient((request) async {
+        return http.Response(
+          'moved',
+          302,
+          headers: {'location': request.url.toString()},
+        );
+      }),
+      appImagePathLoader: () => target.path,
+      makeExecutable: (_) async {},
+      relaunch: (_) async {},
+    );
+
+    await expectLater(
+      service.update(
+        Uri.parse('https://example.com/App.AppImage'),
+        expectedSha256: '0' * 64,
+      ),
+      throwsStateError,
+    );
+    expect(target.readAsBytesSync(), [1, 2, 3]);
+  });
 
   group('canSelfUpdate', () {
     DesktopSelfUpdateService service(
@@ -310,11 +391,10 @@ void main() {
     );
 
     test('throws when the extraction has no executable', () async {
+      final payload = List.filled(200000, 66);
       var stagingDir = '';
       final svc = DesktopSelfUpdateService(
-        client: MockClient(
-          (_) async => http.Response.bytes(List.filled(200000, 66), 200),
-        ),
+        client: MockClient((_) async => http.Response.bytes(payload, 200)),
         runningExePathLoader: () => exePath,
         extractArchive: (_, destinationPath) async {
           stagingDir = Directory(destinationPath).parent.path;
@@ -328,21 +408,21 @@ void main() {
       await expectLater(
         svc.update(
           Uri.parse('https://example.com/SpectrumPit-windows-x64.zip'),
-          expectedSha256: 'a' * 64,
+          expectedSha256: sha256.convert(payload).toString(),
         ),
         throwsStateError,
       );
 
+      expect(stagingDir, isNotEmpty);
       expect(Directory(stagingDir).existsSync(), isFalse);
     });
 
     test('refuses a non-ASCII install path and cleans up staging', () async {
+      final payload = List.filled(200000, 66);
       var stagingDir = '';
       var relaunched = false;
       final svc = DesktopSelfUpdateService(
-        client: MockClient(
-          (_) async => http.Response.bytes(List.filled(200000, 66), 200),
-        ),
+        client: MockClient((_) async => http.Response.bytes(payload, 200)),
         runningExePathLoader: () => '${dir.path}/instalación/app.exe',
         extractArchive: (_, destinationPath) async {
           stagingDir = Directory(destinationPath).parent.path;
@@ -356,11 +436,12 @@ void main() {
       await expectLater(
         svc.update(
           Uri.parse('https://example.com/SpectrumPit-windows-x64.zip'),
-          expectedSha256: 'a' * 64,
+          expectedSha256: sha256.convert(payload).toString(),
         ),
         throwsStateError,
       );
       expect(relaunched, isFalse);
+      expect(stagingDir, isNotEmpty);
       expect(Directory(stagingDir).existsSync(), isFalse);
     });
 
@@ -449,12 +530,11 @@ void main() {
     );
 
     test('throws when the extracted bundle lacks the executable', () async {
+      final payload = List.filled(200000, 66);
       var stagingDir = '';
       var relaunched = false;
       final svc = DesktopSelfUpdateService(
-        client: MockClient(
-          (_) async => http.Response.bytes(List.filled(200000, 66), 200),
-        ),
+        client: MockClient((_) async => http.Response.bytes(payload, 200)),
         runningExePathLoader: () => exePath,
 
         extractArchive: (_, destinationPath) async {
@@ -470,22 +550,22 @@ void main() {
       await expectLater(
         svc.update(
           Uri.parse('https://example.com/SpectrumPit-macos.zip'),
-          expectedSha256: 'a' * 64,
+          expectedSha256: sha256.convert(payload).toString(),
         ),
         throwsStateError,
       );
       expect(relaunched, isFalse);
 
+      expect(stagingDir, isNotEmpty);
       expect(Directory(stagingDir).existsSync(), isFalse);
     });
 
     test('cleans up staging when extraction fails', () async {
+      final payload = List.filled(200000, 66);
       var stagingDir = '';
       var relaunched = false;
       final svc = DesktopSelfUpdateService(
-        client: MockClient(
-          (_) async => http.Response.bytes(List.filled(200000, 66), 200),
-        ),
+        client: MockClient((_) async => http.Response.bytes(payload, 200)),
         runningExePathLoader: () => exePath,
         extractArchive: (_, destinationPath) async {
           stagingDir = Directory(destinationPath).parent.path;
@@ -499,11 +579,12 @@ void main() {
       await expectLater(
         svc.update(
           Uri.parse('https://example.com/SpectrumPit-macos.zip'),
-          expectedSha256: 'a' * 64,
+          expectedSha256: sha256.convert(payload).toString(),
         ),
         throwsStateError,
       );
       expect(relaunched, isFalse);
+      expect(stagingDir, isNotEmpty);
       expect(Directory(stagingDir).existsSync(), isFalse);
     });
 
@@ -598,6 +679,10 @@ void main() {
     final droppedOld = script.indexOf(r'rmdir /s /q "%OLDDIR%"', swappedIn);
     expect(movedAside, lessThan(swappedIn));
     expect(droppedOld, greaterThan(swappedIn));
+
+    final steppedAside = script.indexOf(r'cd /d "%STAGING%"');
+    expect(steppedAside, isNonNegative);
+    expect(steppedAside, lessThan(movedAside));
 
     expect(script, isNot(contains(r'rmdir /s /q "%INSTALL%"')));
 

@@ -7,8 +7,29 @@ import 'package:spectrumpit/src/services/user_role_service_interface.dart';
 class FakeUserRoleService implements UserRoleService {
   final Map<String, Set<UserRole>> _roles = {};
   final Map<String, String> _displayNames = {};
+  final Map<String, String> _emails = {};
   final StreamController<List<UserProfile>> _profiles =
       StreamController<List<UserProfile>>.broadcast();
+
+  void setProfile(
+    String uid, {
+    String? displayName,
+    String? email,
+    Set<UserRole>? roles,
+  }) {
+    if (roles != null) _roles[uid] = roles;
+    _roles.putIfAbsent(uid, () => {UserRole.viewer});
+    if (displayName != null) _displayNames[uid] = displayName;
+    if (email != null) _emails[uid] = email;
+    _emitProfiles();
+  }
+
+  UserProfile profileFor(String uid) => UserProfile(
+    uid: uid,
+    displayName: _displayNames[uid] ?? uid,
+    email: _emails[uid],
+    roles: _roles[uid] ?? {UserRole.viewer},
+  );
 
   void setRoles(String uid, Set<UserRole> roles) {
     _roles[uid] = roles;
@@ -21,17 +42,25 @@ class FakeUserRoleService implements UserRoleService {
   }
 
   @override
-  Future<Set<UserRole>> fetchOrCreateRoles({
+  Future<UserProfile> fetchOrCreateProfile({
     required String uid,
     String displayName = '',
     String? email,
   }) async {
     if (!_roles.containsKey(uid)) {
-      _roles[uid] = {UserRole.viewer};
-      _displayNames[uid] = displayName;
+      _roles[uid] = {UserRole.pit};
       _emitProfiles();
     }
-    return _roles[uid]!;
+
+    _displayNames.putIfAbsent(uid, () => displayName);
+    if (email != null) _emails.putIfAbsent(uid, () => email);
+    return profileFor(uid);
+  }
+
+  @override
+  Future<void> updateDisplayName(String uid, String displayName) async {
+    _displayNames[uid] = displayName;
+    _emitProfiles();
   }
 
   @override
@@ -47,15 +76,7 @@ class FakeUserRoleService implements UserRoleService {
   }
 
   List<UserProfile> _currentProfiles() {
-    final profiles = _roles.entries
-        .map(
-          (e) => UserProfile(
-            uid: e.key,
-            displayName: _displayNames[e.key] ?? e.key,
-            roles: e.value,
-          ),
-        )
-        .toList();
+    final profiles = _roles.keys.map(profileFor).toList();
 
     profiles.sort(
       (a, b) =>

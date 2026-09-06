@@ -226,17 +226,25 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('New user auto-gets viewer and sees the no-access screen', (
-    tester,
-  ) async {
+  testWidgets('New user auto-gets pit and lands in the app', (tester) async {
     const user = SpectrumUser(uid: 'new-uid', displayName: 'New User');
 
     await _buildShell(tester, signedInUser: user);
 
+    expect(find.text('You do not have access.'), findsNothing);
+    expect(find.byType(NavigationBar), findsOneWidget);
+  });
+
+  testWidgets('Demoted viewer sees the no-access screen', (tester) async {
+    const user = SpectrumUser(uid: 'demoted-uid', displayName: 'New User');
+    await _buildShell(tester, signedInUser: user, userRoles: {UserRole.viewer});
+
     expect(find.byType(NavigationBar), findsNothing);
     expect(find.text('You do not have access.'), findsOneWidget);
     expect(
-      find.text('Ask an admin to approve your account (New User).'),
+      find.text(
+        'Ask an admin to set your roles from the Users tab (New User).',
+      ),
       findsOneWidget,
     );
 

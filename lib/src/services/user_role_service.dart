@@ -11,11 +11,23 @@ class FirestoreUserRoleService implements UserRoleService {
   final FirebaseFirestore _firestore;
 
   @override
-  Future<Set<UserRole>> fetchOrCreateRoles({
+  Future<UserProfile> fetchOrCreateProfile({
     required String uid,
     String displayName = '',
     String? email,
   }) async {
+    final pit = UserProfile(
+      uid: uid,
+      displayName: displayName,
+      email: email,
+      roles: const {UserRole.pit},
+    );
+    final viewer = UserProfile(
+      uid: uid,
+      displayName: displayName,
+      email: email,
+      roles: const {UserRole.viewer},
+    );
     try {
       final ref = _firestore.collection('userProfiles').doc(uid);
       final doc = await ref.get();
@@ -24,16 +36,16 @@ class FirestoreUserRoleService implements UserRoleService {
           'uid': uid,
           'displayName': displayName,
           'email': ?email,
-          'roles': ['viewer'],
+          'roles': ['pit'],
           'createdAt': DateTime.now().toUtc().toIso8601String(),
         };
 
         try {
           await ref.set(data);
         } catch (_) {}
-        return {UserRole.viewer};
+        return pit;
       }
-      return UserProfile.fromJson(uid, doc.data()!).roles;
+      return UserProfile.fromJson(uid, doc.data()!);
     } catch (_) {
       try {
         final cached = await _firestore
@@ -42,11 +54,18 @@ class FirestoreUserRoleService implements UserRoleService {
             .get(const GetOptions(source: Source.cache));
         final data = cached.data();
         if (cached.exists && data != null) {
-          return UserProfile.fromJson(uid, data).roles;
+          return UserProfile.fromJson(uid, data);
         }
       } catch (_) {}
-      return {UserRole.viewer};
+      return viewer;
     }
+  }
+
+  @override
+  Future<void> updateDisplayName(String uid, String displayName) async {
+    await _firestore.collection('userProfiles').doc(uid).set({
+      'displayName': displayName,
+    }, SetOptions(merge: true));
   }
 
   @override

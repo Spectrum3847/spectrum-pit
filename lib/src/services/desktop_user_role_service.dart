@@ -16,11 +16,23 @@ class DesktopUserRoleService implements UserRoleService {
   final Duration _pollInterval;
 
   @override
-  Future<Set<UserRole>> fetchOrCreateRoles({
+  Future<UserProfile> fetchOrCreateProfile({
     required String uid,
     String displayName = '',
     String? email,
   }) async {
+    final pit = UserProfile(
+      uid: uid,
+      displayName: displayName,
+      email: email,
+      roles: const {UserRole.pit},
+    );
+    final viewer = UserProfile(
+      uid: uid,
+      displayName: displayName,
+      email: email,
+      roles: const {UserRole.viewer},
+    );
     try {
       final doc = await _firestore.getDocument('userProfiles/$uid');
       if (doc == null) {
@@ -29,16 +41,25 @@ class DesktopUserRoleService implements UserRoleService {
             'uid': uid,
             'displayName': displayName,
             'email': ?email,
-            'roles': ['viewer'],
+            'roles': ['pit'],
             'createdAt': DateTime.now().toUtc().toIso8601String(),
           }, id: uid);
         } catch (_) {}
-        return {UserRole.viewer};
+        return pit;
       }
-      return UserProfile.fromJson(uid, doc.fields).roles;
+      return UserProfile.fromJson(uid, doc.fields);
     } catch (_) {
-      return {UserRole.viewer};
+      return viewer;
     }
+  }
+
+  @override
+  Future<void> updateDisplayName(String uid, String displayName) async {
+    await _firestore.setDocument(
+      'userProfiles/$uid',
+      <String, dynamic>{'displayName': displayName},
+      updateMask: const ['displayName'],
+    );
   }
 
   @override

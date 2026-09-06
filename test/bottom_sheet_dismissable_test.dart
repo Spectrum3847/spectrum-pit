@@ -49,7 +49,15 @@ showModalBottomSheet(
   isScrollControlled: true,
 );
 ''';
-    for (final source in [lineComment, blockComment]) {
+
+    const nestedBlockComment = '''
+showModalBottomSheet(
+  context: context,
+  /* outer /* inner */ showDragHandle: true, */
+  isScrollControlled: true,
+);
+''';
+    for (final source in [lineComment, blockComment, nestedBlockComment]) {
       final masked = _withoutStringLiterals(source);
       final call = _callAt(masked, masked.indexOf('showModalBottomSheet'));
       expect(call, contains('isScrollControlled: true'));
@@ -76,7 +84,8 @@ String _withoutStringLiterals(String source) {
   final out = StringBuffer();
   String? quote;
   var inLineComment = false;
-  var inBlockComment = false;
+
+  var blockDepth = 0;
   for (var i = 0; i < source.length; i++) {
     final char = source[i];
     if (inLineComment) {
@@ -84,9 +93,16 @@ String _withoutStringLiterals(String source) {
       out.write(char == '\n' ? '\n' : ' ');
       continue;
     }
-    if (inBlockComment) {
-      if (char == '*' && i + 1 < source.length && source[i + 1] == '/') {
-        inBlockComment = false;
+    if (blockDepth > 0) {
+      final next = i + 1 < source.length ? source[i + 1] : '';
+      if (char == '*' && next == '/') {
+        blockDepth--;
+        out.write('  ');
+        i++;
+        continue;
+      }
+      if (char == '/' && next == '*') {
+        blockDepth++;
         out.write('  ');
         i++;
         continue;
@@ -103,7 +119,7 @@ String _withoutStringLiterals(String source) {
         continue;
       }
       if (char == '/' && next == '*') {
-        inBlockComment = true;
+        blockDepth = 1;
         out.write('  ');
         i++;
         continue;

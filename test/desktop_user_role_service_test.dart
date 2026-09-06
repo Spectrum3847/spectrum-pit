@@ -25,7 +25,7 @@ String _profileDoc(String uid, List<String> roles) => jsonEncode({
 });
 
 void main() {
-  group('fetchOrCreateRoles', () {
+  group('fetchOrCreateProfile', () {
     test('reads an existing profile', () async {
       final service = DesktopUserRoleService(
         firestore: _firestore(
@@ -34,10 +34,12 @@ void main() {
           ),
         ),
       );
-      expect(await service.fetchOrCreateRoles(uid: 'u1'), {UserRole.pit});
+      expect((await service.fetchOrCreateProfile(uid: 'u1')).roles, {
+        UserRole.pit,
+      });
     });
 
-    test('creates a viewer profile on first sign-in (404)', () async {
+    test('creates a pit profile on first sign-in (404)', () async {
       var createCalled = false;
       final service = DesktopUserRoleService(
         firestore: _firestore(
@@ -53,17 +55,17 @@ void main() {
               fc.FirestoreValueCodec.decode(
                 (fields['roles'] as Map).cast<String, dynamic>(),
               ),
-              ['viewer'],
+              ['pit'],
             );
-            return http.Response(_profileDoc('u1', ['viewer']), 200);
+            return http.Response(_profileDoc('u1', ['pit']), 200);
           }),
         ),
       );
-      final roles = await service.fetchOrCreateRoles(
+      final profile = await service.fetchOrCreateProfile(
         uid: 'u1',
         displayName: 'D',
       );
-      expect(roles, {UserRole.viewer});
+      expect(profile.roles, {UserRole.pit});
       expect(createCalled, isTrue);
     });
 
@@ -73,7 +75,9 @@ void main() {
           MockClient((_) async => http.Response('denied', 403)),
         ),
       );
-      expect(await service.fetchOrCreateRoles(uid: 'u1'), {UserRole.viewer});
+      expect((await service.fetchOrCreateProfile(uid: 'u1')).roles, {
+        UserRole.viewer,
+      });
     });
   });
 

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:firestore_client/firestore_client.dart' as fc;
@@ -157,6 +158,87 @@ void main() {
       );
       final items = await service.streamAll().first;
       expect(items.map((i) => i.id), ['a', 'b']);
+    });
+
+    test('a push made during a poll fetch survives that poll', () async {
+      final listStarted = Completer<void>();
+      final listGate = Completer<void>();
+      var listCalls = 0;
+      final service = DesktopInventorySyncService(
+        pollInterval: const Duration(milliseconds: 5),
+        firestore: _firestore(
+          MockClient((request) async {
+            if (request.method != 'GET') {
+              return http.Response(
+                _doc('inventoryItems', 'b', _invFields()),
+                200,
+              );
+            }
+            listCalls++;
+            if (listCalls == 1) {
+              listStarted.complete();
+              await listGate.future;
+            }
+            return http.Response(
+              jsonEncode({
+                'documents': [
+                  jsonDecode(_doc('inventoryItems', 'a', _invFields())),
+                ],
+              }),
+              200,
+            );
+          }),
+        ),
+      );
+      final first = service.streamAll().first;
+      await listStarted.future;
+      await service.upsert(
+        InventoryItem(
+          id: 'b',
+          name: 'Wrench',
+          labLocation: 'L1',
+          pitLocation: 'P1',
+          status: InventoryStatus.inPit,
+          updatedAt: DateTime.utc(2026, 1, 1),
+        ),
+      );
+      listGate.complete();
+
+      expect((await first).map((i) => i.id), ['a', 'b']);
+    });
+
+    test('a delete made during a poll fetch is not resurrected', () async {
+      final listStarted = Completer<void>();
+      final listGate = Completer<void>();
+      var listCalls = 0;
+      final service = DesktopInventorySyncService(
+        pollInterval: const Duration(milliseconds: 5),
+        firestore: _firestore(
+          MockClient((request) async {
+            if (request.method != 'GET') return http.Response('{}', 200);
+            listCalls++;
+            if (listCalls == 1) {
+              listStarted.complete();
+              await listGate.future;
+            }
+            return http.Response(
+              jsonEncode({
+                'documents': [
+                  jsonDecode(_doc('inventoryItems', 'a', _invFields())),
+                  jsonDecode(_doc('inventoryItems', 'b', _invFields())),
+                ],
+              }),
+              200,
+            );
+          }),
+        ),
+      );
+      final first = service.streamAll().first;
+      await listStarted.future;
+      await service.delete('b');
+      listGate.complete();
+
+      expect((await first).map((i) => i.id), ['a']);
     });
 
     test('a failure on the very first poll does not end the stream', () async {

@@ -39,6 +39,9 @@ class LocalOnlyAuthService implements SpectrumAuthService {
   Future<void> signIn() async {}
 
   @override
+  Future<void> updateDisplayName(String displayName) async {}
+
+  @override
   Future<void> signOut() async {}
 
   @override
@@ -49,11 +52,19 @@ class LocalOnlyAuthService implements SpectrumAuthService {
 
 class LocalUserRoleService implements UserRoleService {
   @override
-  Future<Set<UserRole>> fetchOrCreateRoles({
+  Future<UserProfile> fetchOrCreateProfile({
     required String uid,
     String displayName = '',
     String? email,
-  }) async => const <UserRole>{UserRole.pit};
+  }) async => UserProfile(
+    uid: uid,
+    displayName: displayName,
+    email: email,
+    roles: const {UserRole.pit},
+  );
+
+  @override
+  Future<void> updateDisplayName(String uid, String displayName) async {}
 
   @override
   Future<void> updateRoles(String targetUid, Set<UserRole> roles) async {}

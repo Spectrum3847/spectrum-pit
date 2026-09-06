@@ -60,14 +60,14 @@ scripts/accuracy-cron/node_modules/
 scripts/sheets-export-cron/node_modules/
 
 .claude/worktrees/
-scripts/promotion-cron/node_modules/
 scripts/report-cron/node_modules/
 scripts/usage-cron/node_modules/
 
 scripts/photo-worker/node_modules/
 scripts/firebase-deploy/node_modules/
+scripts/migrate-to-central-uid/node_modules/
 
-mcp/node_modules/
+scripts/migrate-to-central-uid/backup-*/
 
 .mimocode/
 exports/
@@ -78,3 +78,7 @@ pit-app-device-test-plan.html
 pit-1.0.0-maintainer-checklist.html
 spectrumpit-setup.html
 prompt.txt
+
+android/key.properties
+android/app/*.keystore
+android/app/*.jks

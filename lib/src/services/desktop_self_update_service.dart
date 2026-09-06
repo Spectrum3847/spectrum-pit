@@ -157,13 +157,27 @@ class DesktopSelfUpdateService {
     }
   }
 
+  static const int _maxRedirects = 5;
+
   Future<http.Response> _downloadVerified(
     Uri url,
     String expectedSha256,
   ) async {
-    final request = http.Request('GET', url)..followRedirects = false;
-    final streamed = await _client.send(request);
-    final response = await http.Response.fromStream(streamed);
+    var target = url;
+    http.Response? response;
+    for (var hop = 0; hop <= _maxRedirects; hop++) {
+      final request = http.Request('GET', target)..followRedirects = false;
+      final streamed = await _client.send(request);
+      final hopResponse = await http.Response.fromStream(streamed);
+      if (!_isRedirect(hopResponse.statusCode)) {
+        response = hopResponse;
+        break;
+      }
+      target = _redirectTarget(target, hopResponse);
+    }
+    if (response == null) {
+      throw StateError('Update download redirected too many times');
+    }
     if (response.statusCode != 200 || response.bodyBytes.length < 100000) {
       throw StateError('Download failed (status ${response.statusCode})');
     }
@@ -174,6 +188,29 @@ class DesktopSelfUpdateService {
       throw StateError('Downloaded update failed its checksum verification');
     }
     return response;
+  }
+
+  static bool _isRedirect(int statusCode) =>
+      statusCode == 301 ||
+      statusCode == 302 ||
+      statusCode == 303 ||
+      statusCode == 307 ||
+      statusCode == 308;
+
+  static Uri _redirectTarget(Uri from, http.Response response) {
+    final location = response.headers['location'];
+    if (location == null || location.trim().isEmpty) {
+      throw StateError('Update download redirected without a location');
+    }
+    final next = Uri.tryParse(location.trim());
+    if (next == null) {
+      throw StateError('Update download redirected to an unreadable URL');
+    }
+    final resolved = from.resolveUri(next);
+    if (resolved.scheme != 'https') {
+      throw StateError('Refusing to follow a non-https update redirect');
+    }
+    return resolved;
   }
 
   static bool _constantTimeHexEquals(String a, String b) {
@@ -278,6 +315,8 @@ class DesktopSelfUpdateService {
       'set "STAGED=%INSTALL%.update-new"',
       'set "OLDDIR=%INSTALL%.update-old"',
       'set /a WAITED=0',
+
+      'cd /d "%STAGING%"',
 
       'if exist "%STAGED%" rmdir /s /q "%STAGED%"',
       'if exist "%OLDDIR%" rmdir /s /q "%OLDDIR%"',

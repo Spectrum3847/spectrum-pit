@@ -36,6 +36,17 @@ class DesktopUpdateInfo {
   final String? expectedSha256;
 }
 
+class DesktopUpdateCheck {
+  const DesktopUpdateCheck({required this.update, required this.hasRelease});
+
+  const DesktopUpdateCheck.noRelease() : update = null, hasRelease = false;
+
+  const DesktopUpdateCheck.upToDate() : update = null, hasRelease = true;
+
+  final DesktopUpdateInfo? update;
+  final bool hasRelease;
+}
+
 class DesktopUpdateService {
   DesktopUpdateService({
     http.Client? client,
@@ -63,7 +74,7 @@ class DesktopUpdateService {
     'BUILD_TIMESTAMP',
   );
 
-  static const Duration nightlyFreshness = Duration(hours: 25);
+  static const Duration nightlyFreshness = Duration(hours: 4);
 
   final http.Client _client;
   final Future<String> Function() _currentVersionLoader;
@@ -83,18 +94,18 @@ class DesktopUpdateService {
     await prefs.setString(channelKey, channel.name);
   }
 
-  Future<DesktopUpdateInfo?> checkForUpdate({
+  Future<DesktopUpdateCheck> checkForUpdate({
     DesktopUpdateChannel? channel,
     bool ignoreVersionGate = false,
   }) async {
     final currentRaw = (await _currentVersionLoader()).trim();
     final current = _parseVersion(currentRaw);
     if (current == null) {
-      return null;
+      return const DesktopUpdateCheck.upToDate();
     }
     final effectiveChannel = channel ?? await currentChannel();
     if (effectiveChannel == DesktopUpdateChannel.nightly) {
-      return _checkNightly(currentRaw, ignoreVersionGate: ignoreVersionGate);
+      return _checkNightly(currentRaw);
     }
     return _checkStable(
       currentRaw,
@@ -103,13 +114,14 @@ class DesktopUpdateService {
     );
   }
 
-  Future<DesktopUpdateInfo?> _checkStable(
+  Future<DesktopUpdateCheck> _checkStable(
     String currentRaw,
     Version current, {
     required bool ignoreVersionGate,
   }) async {
     Object? transportFailure;
     StackTrace? transportStackTrace;
+    var sawRelease = false;
     for (final repository in _repositories) {
       final _ReleaseSnapshot? release;
       try {
@@ -122,31 +134,36 @@ class DesktopUpdateService {
       if (release == null || release.version == null) {
         continue;
       }
-      final isNewer =
-          ignoreVersionGate || release.version!.compareTo(current) > 0;
+      sawRelease = true;
+
+      final isNewer = ignoreVersionGate
+          ? release.version!.compareTo(current) != 0
+          : release.version!.compareTo(current) > 0;
       if (isNewer) {
-        return DesktopUpdateInfo(
-          currentVersion: currentRaw,
-          latestVersion: release.rawTag,
-          releaseUrl: release.url,
-          repository: repository,
-          assetUrl: release.assetUrl,
-          expectedSha256: release.expectedSha256,
+        return DesktopUpdateCheck(
+          hasRelease: true,
+          update: DesktopUpdateInfo(
+            currentVersion: currentRaw,
+            latestVersion: release.rawTag,
+            releaseUrl: release.url,
+            repository: repository,
+            assetUrl: release.assetUrl,
+            expectedSha256: release.expectedSha256,
+          ),
         );
       }
     }
-    if (transportFailure != null) {
+    if (transportFailure != null && !sawRelease) {
       Error.throwWithStackTrace(transportFailure, transportStackTrace!);
     }
-    return null;
+    return sawRelease
+        ? const DesktopUpdateCheck.upToDate()
+        : const DesktopUpdateCheck.noRelease();
   }
 
-  Future<DesktopUpdateInfo?> _checkNightly(
-    String currentRaw, {
-    required bool ignoreVersionGate,
-  }) async {
-    if (!ignoreVersionGate && _isFreshNightly()) {
-      return null;
+  Future<DesktopUpdateCheck> _checkNightly(String currentRaw) async {
+    if (_isFreshNightly()) {
+      return const DesktopUpdateCheck.upToDate();
     }
     final release = await _loadRelease(
       _repositories.first,
@@ -154,15 +171,18 @@ class DesktopUpdateService {
       requireVersion: false,
     );
     if (release == null) {
-      return null;
+      return const DesktopUpdateCheck.noRelease();
     }
-    return DesktopUpdateInfo(
-      currentVersion: currentRaw,
-      latestVersion: release.rawTag,
-      releaseUrl: release.url,
-      repository: _repositories.first,
-      assetUrl: release.assetUrl,
-      expectedSha256: release.expectedSha256,
+    return DesktopUpdateCheck(
+      hasRelease: true,
+      update: DesktopUpdateInfo(
+        currentVersion: currentRaw,
+        latestVersion: release.rawTag,
+        releaseUrl: release.url,
+        repository: _repositories.first,
+        assetUrl: release.assetUrl,
+        expectedSha256: release.expectedSha256,
+      ),
     );
   }
 

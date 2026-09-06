@@ -16,7 +16,10 @@ void main() {
   });
 
   test('LocalUserRoleService grants the pit role (no admin)', () async {
-    final roles = await LocalUserRoleService().fetchOrCreateRoles(uid: 'local');
+    final profile = await LocalUserRoleService().fetchOrCreateProfile(
+      uid: 'local',
+    );
+    final roles = profile.roles;
     expect(roles, {UserRole.pit});
     expect(roles.canManageUsers, isFalse);
     expect(await LocalUserRoleService().streamAllProfiles().toList(), isEmpty);
