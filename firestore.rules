@@ -169,7 +169,7 @@ service cloud.firestore {
         && data.keys().hasOnly(['uid', 'displayName', 'email', 'roles', 'createdAt'])
         && data.roles is list
         && data.roles.size() == 1
-        && data.roles.hasAll(['viewer'])
+        && (data.roles.hasAll(['pit']) || data.roles.hasAll(['viewer']))
         && data.displayName is string
         && data.displayName.size() <= 256
         && (!('email' in data) || (data.email is string && data.email.size() <= 320))

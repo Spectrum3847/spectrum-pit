@@ -83,7 +83,7 @@ void main() {
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
 
-    expect(await roleService.fetchOrCreateRoles(uid: 'u1'), {
+    expect((await roleService.fetchOrCreateProfile(uid: 'u1')).roles, {
       UserRole.pit,
       UserRole.developer,
     });

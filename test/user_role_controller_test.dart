@@ -137,7 +137,7 @@ void main() {
       controller.dispose();
     });
 
-    test('auto-assigns viewer for new user with no profile', () async {
+    test('auto-assigns pit for new user with no profile', () async {
       auth.nextSignInUser = const SpectrumUser(
         uid: 'uid-new',
         displayName: 'New User',
@@ -151,7 +151,7 @@ void main() {
       await auth.signIn();
       await Future<void>.delayed(Duration.zero);
 
-      expect(controller.roles, {UserRole.viewer});
+      expect(controller.roles, {UserRole.pit});
       controller.dispose();
     });
 
@@ -298,6 +298,107 @@ void main() {
       await expectLater(
         controller.updateUserRoles('uid-admin', {UserRole.viewer}),
         throwsStateError,
+      );
+      controller.dispose();
+    });
+  });
+
+  group('display name', () {
+    test('publishes the profile name onto the auth session', () async {
+      final roles = FakeUserRoleService()
+        ..setProfile('u1', displayName: 'Chosen Name', roles: {UserRole.pit});
+      final auth = FakeSpectrumAuthService(
+        initialUser: const SpectrumUser(uid: 'u1', displayName: 'Google Name'),
+      );
+      final controller = UserRoleController(
+        authService: auth,
+        roleService: roles,
+      );
+      await controller.bootstrap();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(auth.displayNameUpdates, ['Chosen Name']);
+      controller.dispose();
+    });
+
+    test('an admin renames a member', () async {
+      final roles = FakeUserRoleService()
+        ..setProfile('uid-admin', displayName: 'A', roles: {UserRole.admin})
+        ..setProfile('u1', displayName: 'Old', roles: {UserRole.pit});
+      final auth = FakeSpectrumAuthService(
+        initialUser: const SpectrumUser(uid: 'uid-admin', displayName: 'A'),
+      );
+      final controller = UserRoleController(
+        authService: auth,
+        roleService: roles,
+      );
+      await controller.bootstrap();
+      await Future<void>.delayed(Duration.zero);
+
+      await controller.updateDisplayName('u1', '  New Name  ');
+
+      expect(roles.profileFor('u1').displayName, 'New Name');
+      controller.dispose();
+    });
+
+    test('a member cannot rename anyone', () async {
+      final roles = FakeUserRoleService()
+        ..setProfile('u1', displayName: 'Pit', roles: {UserRole.pit})
+        ..setProfile('u2', displayName: 'Other', roles: {UserRole.pit});
+      final auth = FakeSpectrumAuthService(
+        initialUser: const SpectrumUser(uid: 'u1', displayName: 'Pit'),
+      );
+      final controller = UserRoleController(
+        authService: auth,
+        roleService: roles,
+      );
+      await controller.bootstrap();
+      await Future<void>.delayed(Duration.zero);
+
+      await expectLater(
+        controller.updateDisplayName('u2', 'Hijack'),
+        throwsStateError,
+      );
+      controller.dispose();
+    });
+
+    test('an admin cannot rename themselves via the GUI', () async {
+      final roles = FakeUserRoleService()
+        ..setProfile('uid-admin', displayName: 'A', roles: {UserRole.admin});
+      final auth = FakeSpectrumAuthService(
+        initialUser: const SpectrumUser(uid: 'uid-admin', displayName: 'A'),
+      );
+      final controller = UserRoleController(
+        authService: auth,
+        roleService: roles,
+      );
+      await controller.bootstrap();
+      await Future<void>.delayed(Duration.zero);
+
+      await expectLater(
+        controller.updateDisplayName('uid-admin', 'Renamed'),
+        throwsStateError,
+      );
+      controller.dispose();
+    });
+
+    test('renaming rejects an empty name', () async {
+      final roles = FakeUserRoleService()
+        ..setProfile('uid-admin', displayName: 'A', roles: {UserRole.admin})
+        ..setProfile('u1', displayName: 'Old', roles: {UserRole.pit});
+      final auth = FakeSpectrumAuthService(
+        initialUser: const SpectrumUser(uid: 'uid-admin', displayName: 'A'),
+      );
+      final controller = UserRoleController(
+        authService: auth,
+        roleService: roles,
+      );
+      await controller.bootstrap();
+      await Future<void>.delayed(Duration.zero);
+
+      await expectLater(
+        controller.updateDisplayName('u1', '   '),
+        throwsArgumentError,
       );
       controller.dispose();
     });

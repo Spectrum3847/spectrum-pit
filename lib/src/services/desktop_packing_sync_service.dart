@@ -4,6 +4,7 @@ import 'package:firestore_client/firestore_client.dart' as fc;
 import 'package:flutter/foundation.dart' show debugPrint;
 
 import 'desktop_polling.dart';
+import 'in_flight_local_writes.dart';
 
 import '../models/packing_record.dart';
 import 'packing_sync_service.dart';
@@ -20,6 +21,9 @@ class DesktopPackingSyncService implements PackingSyncService {
 
   final void Function(Object error)? _onPollError;
 
+  final InFlightLocalWrites<PackingRecord> _inFlightWrites =
+      InFlightLocalWrites<PackingRecord>();
+
   @override
   Future<List<PackingRecord>> fetchAll() async {
     try {
@@ -34,15 +38,29 @@ class DesktopPackingSyncService implements PackingSyncService {
 
   @override
   Future<void> upsert(PackingRecord record) async {
-    await _firestore.setDocument('packingRecords/${record.id}', {
-      ...record.toJson(),
-      'updatedAtTs': record.updatedAt.toUtc(),
-    });
+    final token = _inFlightWrites.beginPush(record.id, record);
+    try {
+      await _firestore.setDocument('packingRecords/${record.id}', {
+        ...record.toJson(),
+        'updatedAtTs': record.updatedAt.toUtc(),
+      });
+
+      _inFlightWrites.recordPush(record.id, record, token);
+    } finally {
+      _inFlightWrites.endWrite(record.id, token);
+    }
   }
 
   @override
   Future<void> delete(String id) async {
-    await _firestore.deleteDocument('packingRecords/$id');
+    final token = _inFlightWrites.beginDelete(id);
+    try {
+      await _firestore.deleteDocument('packingRecords/$id');
+
+      _inFlightWrites.recordDelete(id, token);
+    } finally {
+      _inFlightWrites.endWrite(id, token);
+    }
   }
 
   @override
@@ -51,11 +69,17 @@ class DesktopPackingSyncService implements PackingSyncService {
     var consecutiveFailures = 0;
     while (true) {
       List<PackingRecord>? items;
+
+      final window = _inFlightWrites.beginFetch();
       try {
         final docs = await _firestore.listDocuments('packingRecords');
-        items = docs.map((d) => PackingRecord.fromJson(d.id, d.fields)).toList()
+        final fetched = <String, PackingRecord>{
+          for (final d in docs) d.id: PackingRecord.fromJson(d.id, d.fields),
+        };
+        items = _inFlightWrites.resolve(window, fetched).values.toList()
           ..sort((a, b) => a.id.compareTo(b.id));
       } catch (error) {
+        _inFlightWrites.abandonFetch(window);
         consecutiveFailures++;
         try {
           _onPollError?.call(error);

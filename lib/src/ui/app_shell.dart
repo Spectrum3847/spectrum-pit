@@ -367,8 +367,8 @@ class _AppShellState extends State<AppShell> {
         ? user.email!
         : user.displayName;
     return account.isEmpty
-        ? 'Ask an admin to approve your account.'
-        : 'Ask an admin to approve your account ($account).';
+        ? 'Ask an admin to set your roles from the Users tab.'
+        : 'Ask an admin to set your roles from the Users tab ($account).';
   }
 
   @override

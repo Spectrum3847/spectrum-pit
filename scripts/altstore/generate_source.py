@@ -84,7 +84,14 @@ def load_existing_versions(path):
                     RETIRED_RELEASE_HOST, CURRENT_RELEASE_HOST
                 )
         return versions
-    except (ValueError, KeyError, IndexError, OSError) as exc:
+    except (
+        ValueError,
+        KeyError,
+        IndexError,
+        OSError,
+        AttributeError,
+        TypeError,
+    ) as exc:
 
         print(
             f"Warning: could not load existing source JSON from '{path}': {exc}. "

@@ -18,6 +18,7 @@ class UserRoleController extends ChangeNotifier {
 
   Set<UserRole> _roles = {UserRole.viewer};
   String? _currentUid;
+  UserProfile? _profile;
 
   int _fetchGeneration = 0;
 
@@ -26,6 +27,8 @@ class UserRoleController extends ChangeNotifier {
   Set<UserRole> get roles => Set.unmodifiable(_roles);
 
   String? get currentUid => _currentUid;
+
+  UserProfile? get profile => _profile;
 
   Object? get rolesError => _rolesError;
 
@@ -56,18 +59,21 @@ class UserRoleController extends ChangeNotifier {
       _currentUid = user.uid;
       final gen = ++_fetchGeneration;
       try {
-        final roles = await _roleService.fetchOrCreateRoles(
+        final profile = await _roleService.fetchOrCreateProfile(
           uid: user.uid,
           displayName: user.displayName,
           email: user.email,
         );
         if (gen == _fetchGeneration) {
-          _roles = roles;
+          _profile = profile;
+          _roles = profile.roles;
           _rolesError = null;
           notifyListeners();
+          await _publishDisplayName();
         }
       } catch (error) {
         if (gen == _fetchGeneration) {
+          _profile = null;
           _roles = {UserRole.viewer};
           _rolesError = error;
           notifyListeners();
@@ -76,10 +82,36 @@ class UserRoleController extends ChangeNotifier {
     } else if (snapshot.state == SpectrumAuthState.signedOut) {
       ++_fetchGeneration;
       _currentUid = null;
+      _profile = null;
       _roles = {UserRole.viewer};
       _rolesError = null;
       notifyListeners();
     }
+  }
+
+  Future<void> _publishDisplayName() async {
+    final wanted = _profile?.displayName ?? '';
+    if (wanted.isEmpty) return;
+    if (_authService.currentUser?.displayName == wanted) return;
+    try {
+      await _authService.updateDisplayName(wanted);
+    } catch (error) {
+      debugPrint('Could not publish the display name: $error');
+    }
+  }
+
+  Future<void> updateDisplayName(String targetUid, String newName) async {
+    final trimmed = newName.trim();
+    if (!canManageUsers) {
+      throw StateError('Only admins can change a display name');
+    }
+    if (targetUid == _currentUid) {
+      throw StateError('Admins cannot rename themselves via the GUI');
+    }
+    if (trimmed.isEmpty) {
+      throw ArgumentError('A display name cannot be empty');
+    }
+    await _roleService.updateDisplayName(targetUid, trimmed);
   }
 
   Future<void> updateUserRoles(String targetUid, Set<UserRole> newRoles) async {

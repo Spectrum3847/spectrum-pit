@@ -116,6 +116,15 @@ class DocsTab extends StatelessWidget {
         if (snapshot.connectionState != ConnectionState.done) {
           return const Center(child: CircularProgressIndicator());
         }
+
+        if (snapshot.hasError) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text('Could not load the doc list: ${snapshot.error}'),
+            ),
+          );
+        }
         final available = snapshot.data ?? const <String>{};
         final groups = <String, List<_DocEntry>>{};
         for (final d in _docs) {

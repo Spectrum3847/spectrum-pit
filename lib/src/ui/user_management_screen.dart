@@ -69,6 +69,10 @@ class _UserManagementBodyState extends State<UserManagementBody> {
               key: ValueKey(profile.uid),
               profile: profile,
               isOwnProfile: isOwnProfile,
+              onRenamed: isOwnProfile
+                  ? null
+                  : (newName) =>
+                        roleController.updateDisplayName(profile.uid, newName),
               onRolesChanged: isOwnProfile
                   ? null
                   : (newRoles) =>
@@ -85,12 +89,14 @@ class _UserProfileTile extends StatefulWidget {
   const _UserProfileTile({
     required this.profile,
     required this.isOwnProfile,
+    required this.onRenamed,
     required this.onRolesChanged,
     super.key,
   });
 
   final UserProfile profile;
   final bool isOwnProfile;
+  final Future<void> Function(String)? onRenamed;
   final Future<void> Function(Set<UserRole>)? onRolesChanged;
 
   @override
@@ -116,6 +122,61 @@ class _UserProfileTileState extends State<_UserProfileTile> {
       _pendingRoles = Set.of(widget.profile.roles);
     } else if (!_expanded) {
       _pendingRoles = Set.of(widget.profile.roles);
+    }
+  }
+
+  Future<void> _rename() async {
+    final profile = widget.profile;
+    final controller = TextEditingController(text: profile.displayName);
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Change display name'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'The name ${profile.email ?? profile.uid} is shown as on the '
+              'schedule. It reaches their device on their next sign-in.',
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              maxLength: 64,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(labelText: 'Display name'),
+              onSubmitted: (value) =>
+                  Navigator.of(dialogContext).pop(value.trim()),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (newName == null || newName.isEmpty || !mounted) return;
+    setState(() => _saving = true);
+    try {
+      await widget.onRenamed!(newName);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Failed to rename: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -193,6 +254,18 @@ class _UserProfileTileState extends State<_UserProfileTile> {
                 style: Theme.of(context).textTheme.labelMedium,
               ),
             ),
+            if (widget.onRenamed != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: _saving ? null : _rename,
+                    icon: const Icon(Icons.badge_rounded),
+                    label: const Text('Change name'),
+                  ),
+                ),
+              ),
             for (final role in UserRole.values)
               CheckboxListTile(
                 title: Text(role.displayName),

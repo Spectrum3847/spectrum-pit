@@ -8,6 +8,15 @@ FRC pit logistics for Spectrum 3847. One app that keeps the team running at an e
 
 Built with Flutter for iOS, Android, and desktop (Windows, macOS, Linux).
 
+## Running it for your own team
+
+The builds below talk to Spectrum 3847's Firebase project, and you cannot
+repoint them from Settings, because the project is compiled in. To run the app
+on your own data you fork this repository, put your own Firebase project into
+it, and build it yourself. [docs/self-hosting.md](docs/self-hosting.md) is the
+full walkthrough, including the sign-in function and the photo service you
+have to stand up yourself.
+
 ## Install
 
 Builds are attached to [this repo's releases](https://github.com/Spectrum3847/spectrum-pit/releases). They are unsigned, so each platform needs a step or two.
@@ -45,11 +54,9 @@ This is the public mirror of Spectrum Pit. The team develops in a private reposi
 
 ## Contributing
 
-Pull requests are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## Maintainer
-
-This project is maintained by [@Project516](https://github.com/Project516) ([project516.dev](https://project516.dev)).
+Pull requests are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md). New to Git
+or Flutter? [docs/setup-guide.md](docs/setup-guide.md) starts from scratch on
+Windows, macOS, and Linux.
 
 ## License
 

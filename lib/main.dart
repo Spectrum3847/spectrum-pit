@@ -1,5 +1,6 @@
 import 'dart:async' show unawaited;
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firestore_client/firestore_client.dart' as fc;
 import 'package:flutter/foundation.dart'
@@ -8,8 +9,11 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'firebase_options.dart';
+import 'firebase_options_central.dart';
 import 'src/app.dart';
 import 'src/services/borrow_sync_service.dart';
+import 'src/services/central_auth_client.dart';
+import 'src/services/central_rest_auth_client.dart';
 import 'src/services/container_photo_sync_service.dart';
 import 'src/services/desktop_auth_service.dart';
 import 'src/services/desktop_borrow_sync_service.dart';
@@ -77,6 +81,18 @@ Future<void> main() async {
     debugPrint('Firebase unavailable: $error');
   }
 
+  FirebaseApp? centralApp;
+  if (firebaseReady && kIsWeb) {
+    try {
+      centralApp = await Firebase.initializeApp(
+        name: 'central',
+        options: centralFirebaseOptions(),
+      );
+    } catch (error) {
+      debugPrint('Central platform unavailable: $error');
+    }
+  }
+
   final SpectrumAuthService authService;
   final UserRoleService roleService;
   final InventorySyncService inventorySyncService;
@@ -90,7 +106,24 @@ Future<void> main() async {
   TelemetryService? telemetryService;
 
   if (firebaseReady && !_isDesktop) {
-    authService = FirebaseSpectrumAuthService();
+    if (kIsWeb) {
+      final centralAuth = centralApp == null
+          ? null
+          : FirebaseAuth.instanceFor(app: centralApp);
+      final centralClient = centralApp == null
+          ? null
+          : FirebaseCentralAuthClient(centralApp: centralApp);
+      authService = FirebaseSpectrumAuthService(
+        centralAuth: centralAuth,
+        centralClient: centralClient,
+      );
+    } else {
+      authService = FirebaseSpectrumAuthService(
+        centralRest: CentralRestAuthClient(
+          centralApiKey: centralFirebaseOptions().apiKey,
+        ),
+      );
+    }
     roleService = FirestoreUserRoleService();
     inventorySyncService = FirestoreInventorySyncService();
     packingSyncService = FirestorePackingSyncService();
@@ -105,7 +138,14 @@ Future<void> main() async {
       clientId: _oauthClientId,
       clientSecret: _oauthClientSecret,
       firebaseApiKey: DefaultFirebaseOptions.web.apiKey,
+
+      centralApiKey: centralFirebaseOptions().apiKey,
       launch: (url) => launchUrl(url, mode: LaunchMode.externalApplication),
+
+      session: fc.FirebaseAuthSession(
+        apiKey: DefaultFirebaseOptions.web.apiKey,
+        httpClient: TimeoutHttpClient(timeout: const Duration(seconds: 8)),
+      ),
     );
 
     final restFirestore = fc.Firestore(

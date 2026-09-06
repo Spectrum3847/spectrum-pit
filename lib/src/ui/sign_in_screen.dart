@@ -158,9 +158,12 @@ class _SignInScreenState extends State<SignInScreen> {
       case SpectrumAuthState.signedOut:
         return [
           const Text(
-            'Sign in with your Google account to get access. A new account '
-            'has to be approved by an admin before any tabs appear. The app '
-            'keeps working offline once you have signed in.',
+            'Sign in with your team Google account to get access. Access is '
+            'granted through Spectrum Tasks: if you are not on the team '
+            'roster there yet, ask an admin to approve you before signing '
+            'in. Once you have signed in, an admin still needs to grant '
+            'your role before any tabs appear. The app keeps working '
+            'offline once you have signed in.',
           ),
           const SizedBox(height: 12),
           FilledButton.icon(
@@ -185,8 +188,10 @@ class _SignInScreenState extends State<SignInScreen> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Sign in with your Google account so an admin can grant your '
-              'team access. Your roles determine which tabs you can open.',
+              'Sign in with your team Google account (the one approved in '
+              'Spectrum Tasks). Once signed in, an admin can grant your '
+              'roles from the Users tab; your roles determine which tabs '
+              'you can open.',
             ),
           ],
         ),

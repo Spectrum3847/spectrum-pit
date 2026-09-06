@@ -4,6 +4,7 @@ import 'package:firestore_client/firestore_client.dart' as fc;
 import 'package:flutter/foundation.dart' show debugPrint;
 
 import 'desktop_polling.dart';
+import 'in_flight_local_writes.dart';
 
 import '../models/inventory_item.dart';
 import 'inventory_sync_service.dart';
@@ -20,6 +21,9 @@ class DesktopInventorySyncService implements InventorySyncService {
 
   final void Function(Object error)? _onPollError;
 
+  final InFlightLocalWrites<InventoryItem> _inFlightWrites =
+      InFlightLocalWrites<InventoryItem>();
+
   @override
   Future<List<InventoryItem>> fetchAll() async {
     final docs = await _firestore.listDocuments('inventoryItems');
@@ -28,15 +32,29 @@ class DesktopInventorySyncService implements InventorySyncService {
 
   @override
   Future<void> upsert(InventoryItem item) async {
-    await _firestore.setDocument('inventoryItems/${item.id}', {
-      ...item.toJson(),
-      'updatedAtTs': item.updatedAt.toUtc(),
-    });
+    final token = _inFlightWrites.beginPush(item.id, item);
+    try {
+      await _firestore.setDocument('inventoryItems/${item.id}', {
+        ...item.toJson(),
+        'updatedAtTs': item.updatedAt.toUtc(),
+      });
+
+      _inFlightWrites.recordPush(item.id, item, token);
+    } finally {
+      _inFlightWrites.endWrite(item.id, token);
+    }
   }
 
   @override
   Future<void> delete(String id) async {
-    await _firestore.deleteDocument('inventoryItems/$id');
+    final token = _inFlightWrites.beginDelete(id);
+    try {
+      await _firestore.deleteDocument('inventoryItems/$id');
+
+      _inFlightWrites.recordDelete(id, token);
+    } finally {
+      _inFlightWrites.endWrite(id, token);
+    }
   }
 
   @override
@@ -45,11 +63,17 @@ class DesktopInventorySyncService implements InventorySyncService {
     var consecutiveFailures = 0;
     while (true) {
       List<InventoryItem>? items;
+
+      final window = _inFlightWrites.beginFetch();
       try {
         final docs = await _firestore.listDocuments('inventoryItems');
-        items = docs.map((d) => InventoryItem.fromJson(d.id, d.fields)).toList()
+        final fetched = <String, InventoryItem>{
+          for (final d in docs) d.id: InventoryItem.fromJson(d.id, d.fields),
+        };
+        items = _inFlightWrites.resolve(window, fetched).values.toList()
           ..sort((a, b) => a.id.compareTo(b.id));
       } catch (error) {
+        _inFlightWrites.abandonFetch(window);
         consecutiveFailures++;
         try {
           _onPollError?.call(error);

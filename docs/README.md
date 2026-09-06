@@ -2,8 +2,11 @@
 
 This is the documentation the public mirror carries. The team's internal
 manuals (release process, CI workflow reference, database plan, and the rest)
-live in the private repository and are not published here, so the app built
-from this mirror bundles this page and nothing else under `docs/`.
+live in the private repository and are not published here. Alongside this
+page the mirror carries two guides: [self-hosting.md](self-hosting.md), which
+walks another team from a fork to a working install on their own Firebase
+project, and [setup-guide.md](setup-guide.md), which starts from scratch for
+someone who has never used a terminal.
 
 ## What the app does
 
@@ -20,7 +23,7 @@ instructions for each are in [README.md](../README.md).
 
 ## Building it yourself
 
-The toolchain is Flutter 3.47.1 / Dart 3.13.1. From a checkout:
+The toolchain is Flutter 3.47.2 / Dart 3.13.2. From a checkout:
 
 ```bash
 flutter pub get

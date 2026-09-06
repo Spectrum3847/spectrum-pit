@@ -9,9 +9,24 @@ import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:spectrumpit/src/services/desktop_auth_service.dart';
+import 'package:spectrumpit/src/services/http_timeout_client.dart';
 import 'package:spectrumpit/src/services/spectrum_auth_service.dart';
 
-MockClient _firebaseBackend({int refreshStatus = 200}) {
+MockClient _firebaseBackend({
+  int refreshStatus = 200,
+  int callableStatus = 200,
+  Map<String, Object?> callableBody = const {
+    'result': {
+      'customToken': 'custom-token-1',
+      'profile': {
+        'displayName': 'Dana Scout',
+        'email': 'dana@example.com',
+        'role': 'mentor',
+      },
+    },
+  },
+  int exchangeStatus = 200,
+}) {
   return MockClient((request) async {
     if (request.url.host == 'securetoken.googleapis.com') {
       if (refreshStatus != 200) {
@@ -26,12 +41,48 @@ MockClient _firebaseBackend({int refreshStatus = 200}) {
         200,
       );
     }
+    if (request.url.host ==
+            'us-central1-spectrumtasks-81c63.cloudfunctions.net' &&
+        request.url.path.endsWith('/getCustomToken')) {
+      return http.Response(jsonEncode(callableBody), callableStatus);
+    }
+    if (request.url.path.contains('accounts:signInWithCustomToken')) {
+      if (exchangeStatus != 200) {
+        return http.Response(
+          jsonEncode({
+            'error': {'message': 'INVALID_CUSTOM_TOKEN'},
+          }),
+          exchangeStatus,
+        );
+      }
+      return http.Response(
+        jsonEncode({
+          'idToken': _idTokenFor('central-uid-1'),
+          'refreshToken': 'refresh-1',
+          'expiresIn': '3600',
+        }),
+        200,
+      );
+    }
+    if (request.url.path.endsWith('accounts:update')) {
+      return http.Response(
+        jsonEncode({
+          'localId': 'central-uid-1',
+          'displayName': 'Dana Renamed',
+          'idToken': 'fb-token-2',
+          'refreshToken': 'refresh-2',
+          'expiresIn': '3600',
+        }),
+        200,
+      );
+    }
     expect(request.url.path, contains('accounts:signInWithIdp'));
+    expect(request.url.queryParameters['key'], 'central-key');
     return http.Response(
       jsonEncode({
-        'localId': 'uid-9',
-        'idToken': 'fb-token-1',
-        'refreshToken': 'refresh-1',
+        'localId': 'central-uid-1',
+        'idToken': 'central-token-1',
+        'refreshToken': 'central-refresh-1',
         'expiresIn': '3600',
         'displayName': 'Dana Scout',
         'email': 'dana@example.com',
@@ -39,6 +90,46 @@ MockClient _firebaseBackend({int refreshStatus = 200}) {
       200,
     );
   });
+}
+
+String _idTokenFor(String uid) {
+  final header = base64Url.encode(utf8.encode(jsonEncode({'alg': 'RS256'})));
+  final claims = base64Url.encode(
+    utf8.encode(jsonEncode({'user_id': uid, 'sub': uid})),
+  );
+  return '$header.$claims.signature';
+}
+
+MockClient _refusingLaterRefreshes() {
+  final ok = _firebaseBackend();
+  var refreshes = 0;
+  return MockClient((request) async {
+    if (request.url.host == 'securetoken.googleapis.com' && ++refreshes > 1) {
+      return http.Response('{"error":"revoked"}', 403);
+    }
+    final streamed = await ok.send(request);
+    return http.Response.fromStream(streamed);
+  });
+}
+
+class _GatedRenameSession extends fc.FirebaseAuthSession {
+  _GatedRenameSession({
+    required super.apiKey,
+    required super.httpClient,
+    required this.gate,
+  });
+
+  final Completer<void> gate;
+
+  @override
+  Future<fc.FirebaseUser> updateDisplayName(String displayName) async {
+    await gate.future;
+    return fc.FirebaseUser(
+      uid: 'central-uid-1',
+      displayName: displayName,
+      email: 'dana@example.com',
+    );
+  }
 }
 
 class _ThrowingSignOutSession extends fc.FirebaseAuthSession {
@@ -50,180 +141,236 @@ class _ThrowingSignOutSession extends fc.FirebaseAuthSession {
   }
 }
 
-DesktopAuthService _service({int refreshStatus = 200}) {
-  final service = DesktopAuthService(
+class _ListenerCountingSession extends fc.FirebaseAuthSession {
+  _ListenerCountingSession({
+    required super.apiKey,
+    required super.httpClient,
+    required super.clock,
+  });
+
+  int liveListeners = 0;
+
+  @override
+  Stream<fc.FirebaseUser?> get authStateChanges {
+    final inner = super.authStateChanges;
+    StreamSubscription<fc.FirebaseUser?>? sub;
+    late final StreamController<fc.FirebaseUser?> controller;
+    controller = StreamController<fc.FirebaseUser?>(
+      onListen: () {
+        liveListeners++;
+        sub = inner.listen(
+          controller.add,
+          onError: controller.addError,
+          onDone: controller.close,
+        );
+      },
+      onCancel: () {
+        liveListeners--;
+        return sub?.cancel();
+      },
+    );
+    return controller.stream;
+  }
+}
+
+DesktopAuthService _service({
+  int refreshStatus = 200,
+  int callableStatus = 200,
+  Map<String, Object?> callableBody = const {
+    'result': {
+      'customToken': 'custom-token-1',
+      'profile': {
+        'displayName': 'Dana Scout',
+        'email': 'dana@example.com',
+        'role': 'mentor',
+      },
+    },
+  },
+  int exchangeStatus = 200,
+  http.Client? client,
+}) {
+  return DesktopAuthService(
     clientId: 'client-123',
-    firebaseApiKey: 'fake-key',
+    firebaseApiKey: 'app-key',
+    centralApiKey: 'central-key',
     session: fc.FirebaseAuthSession(
-      apiKey: 'fake-key',
-      httpClient: _firebaseBackend(refreshStatus: refreshStatus),
+      apiKey: 'app-key',
+      httpClient: client ?? _firebaseBackend(refreshStatus: refreshStatus),
     ),
     signInFlow: () async => const fc.GoogleTokens(idToken: 'google-id-token'),
+    centralHttpClient:
+        client ??
+        _firebaseBackend(
+          callableStatus: callableStatus,
+          callableBody: callableBody,
+          exchangeStatus: exchangeStatus,
+        ),
   );
-  addTearDown(service.dispose);
-  return service;
 }
+
+const _deniedCallable = <String, Object?>{
+  'error': {'status': 'PERMISSION_DENIED', 'message': 'not approved'},
+};
+
+const _appSession = <String, Object>{
+  'uid': 'central-uid-1',
+  'displayName': 'Dana Scout',
+  'email': 'dana@example.com',
+  'refreshToken': 'refresh-1',
+};
+
+const _centralSession = <String, Object>{
+  'uid': 'central-uid-1',
+  'refreshToken': 'central-refresh-1',
+};
 
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
 
-  test('signIn exchanges the Google token and emits signedIn', () async {
+  test('signIn exchanges the Google token on the central project and mints an app session', () async {
     final service = _service();
+    addTearDown(service.dispose);
     await service.signIn();
 
     expect(service.snapshot.state, SpectrumAuthState.signedIn);
-    expect(service.currentUser?.uid, 'uid-9');
+
+    expect(service.currentUser?.uid, 'central-uid-1');
     expect(service.currentUser?.displayName, 'Dana Scout');
-    expect(await service.idToken(), 'fb-token-1');
+
+    expect(await service.idToken(), 'fb-token-refreshed');
+  });
+
+  test('signIn persists the app session for the next launch', () async {
+    final service = _service();
+    addTearDown(service.dispose);
+    await service.signIn();
+
+    final prefs = await SharedPreferences.getInstance();
+    final stored = prefs.getString('desktop_auth_session_v2');
+    expect(stored, isNotNull);
+    final decoded = jsonDecode(stored!) as Map<String, dynamic>;
+    expect(decoded['uid'], 'central-uid-1');
+
+    expect(decoded['refreshToken'], 'refresh-2');
+  });
+
+  test('updateDisplayName publishes and persists the new name', () async {
+    final service = _service();
+    addTearDown(service.dispose);
+    await service.signIn();
+
+    await service.updateDisplayName('Dana Renamed');
+
+    expect(service.currentUser?.displayName, 'Dana Renamed');
+    final prefs = await SharedPreferences.getInstance();
+    final stored = jsonDecode(
+      prefs.getString('desktop_auth_session_v2')!,
+    ) as Map<String, dynamic>;
+    expect(stored['displayName'], 'Dana Renamed');
   });
 
   test(
-    'snapshotStream emits signingIn then signedIn on a successful sign-in',
+    'a rename landing after a sign-out does not restore the session',
     () async {
-      final service = _service();
-      final states = <SpectrumAuthState>[];
-      final sub = service.snapshotStream.listen((s) => states.add(s.state));
-      addTearDown(sub.cancel);
-
+      final gate = Completer<void>();
+      final session = _GatedRenameSession(
+        apiKey: 'app-key',
+        httpClient: _firebaseBackend(),
+        gate: gate,
+      );
+      final service = DesktopAuthService(
+        clientId: 'client-123',
+        firebaseApiKey: 'app-key',
+        centralApiKey: 'central-key',
+        session: session,
+        signInFlow: () async =>
+            const fc.GoogleTokens(idToken: 'google-id-token'),
+        centralHttpClient: _firebaseBackend(),
+      );
+      addTearDown(service.dispose);
       await service.signIn();
 
-      await Future<void>.delayed(Duration.zero);
+      final rename = service.updateDisplayName('Dana Renamed');
+      await service.signOut();
+      gate.complete();
+      await rename;
 
-      expect(
-        states,
-        containsAllInOrder(<SpectrumAuthState>[
-          SpectrumAuthState.signingIn,
-          SpectrumAuthState.signedIn,
-        ]),
-      );
+      expect(service.snapshot.state, SpectrumAuthState.signedOut);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('desktop_auth_session_v2'), isNull);
     },
   );
 
-  test('signIn persists the session for the next launch', () async {
-    await _service().signIn();
-
-    final prefs = await SharedPreferences.getInstance();
-    final stored = prefs.getString('desktop_auth_session_v1');
-    expect(stored, isNotNull);
-    final decoded = jsonDecode(stored!) as Map<String, dynamic>;
-    expect(decoded['uid'], 'uid-9');
-    expect(decoded['refreshToken'], 'refresh-1');
-  });
-
   test('initialize restores a persisted session', () async {
     SharedPreferences.setMockInitialValues(<String, Object>{
-      'desktop_auth_session_v1': jsonEncode({
-        'uid': 'uid-9',
+      'desktop_auth_session_v2': jsonEncode({
+        'uid': 'central-uid-1',
         'displayName': 'Dana Scout',
         'email': 'dana@example.com',
         'refreshToken': 'refresh-1',
       }),
     });
     final service = _service();
+    addTearDown(service.dispose);
     await service.initialize();
 
     expect(service.snapshot.state, SpectrumAuthState.signedIn);
-    expect(service.currentUser?.uid, 'uid-9');
+    expect(service.currentUser?.uid, 'central-uid-1');
     expect(await service.idToken(), 'fb-token-refreshed');
   });
 
   test('initialize drops a revoked session and stays signed out', () async {
     SharedPreferences.setMockInitialValues(<String, Object>{
-      'desktop_auth_session_v1': jsonEncode({
-        'uid': 'uid-9',
+      'desktop_auth_session_v2': jsonEncode({
+        'uid': 'central-uid-1',
         'refreshToken': 'dead',
       }),
     });
-    final service = _service(refreshStatus: 400);
+    final backend = _firebaseBackend(refreshStatus: 400);
+    final service = _service(client: backend);
+    addTearDown(service.dispose);
     await service.initialize();
 
     expect(service.snapshot.state, SpectrumAuthState.signedOut);
     final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getString('desktop_auth_session_v1'), isNull);
-  });
-
-  test('signOut clears the session and the persisted copy', () async {
-    final service = _service();
-    await service.signIn();
-    await service.signOut();
-
-    expect(service.snapshot.state, SpectrumAuthState.signedOut);
-    expect(await service.idToken(), isNull);
-    final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getString('desktop_auth_session_v1'), isNull);
-  });
-
-  test('signOut drops the data scoped to the user who left', () async {
-    final service = _service();
-    final ended = <String>[];
-    service.onSessionEnded = (uid) async => ended.add(uid);
-    await service.signIn();
-    await service.signOut();
-
-    expect(ended, <String>['uid-9']);
-  });
-
-  test('signOut completes when clearing the cached data fails', () async {
-    final service = _service();
-    service.onSessionEnded = (_) async =>
-        throw const FileSystemException('locked');
-    await service.signIn();
-    await service.signOut();
-
-    expect(service.snapshot.state, SpectrumAuthState.signedOut);
-    final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getString('desktop_auth_session_v1'), isNull);
-  });
-
-  test('a revoked session drops the data cached for it', () async {
-    SharedPreferences.setMockInitialValues(<String, Object>{
-      'desktop_auth_session_v1': jsonEncode({
-        'uid': 'uid-gone',
-        'refreshToken': 'dead',
-      }),
-    });
-    final service = _service(refreshStatus: 400);
-    final ended = <String>[];
-    service.onSessionEnded = (uid) async => ended.add(uid);
-    await service.initialize();
-
-    expect(service.snapshot.state, SpectrumAuthState.signedOut);
-    expect(ended, <String>['uid-gone']);
+    expect(prefs.getString('desktop_auth_session_v2'), isNull);
   });
 
   test('initialize drops a payload with a wrong-typed refresh token', () async {
     SharedPreferences.setMockInitialValues(<String, Object>{
-      'desktop_auth_session_v1': jsonEncode({
-        'uid': 'uid-9',
+      'desktop_auth_session_v2': jsonEncode({
+        'uid': 'central-uid-1',
         'refreshToken': 12345,
       }),
     });
     final service = _service();
+    addTearDown(service.dispose);
     final ended = <String>[];
     service.onSessionEnded = (uid) async => ended.add(uid);
     await service.initialize();
 
     expect(service.snapshot.state, SpectrumAuthState.signedOut);
     final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getString('desktop_auth_session_v1'), isNull);
+    expect(prefs.getString('desktop_auth_session_v2'), isNull);
 
-    expect(ended, <String>['uid-9']);
+    expect(ended, <String>['central-uid-1']);
   });
 
   test('initialize stays signed in when the network fails', () async {
     SharedPreferences.setMockInitialValues(<String, Object>{
-      'desktop_auth_session_v1': jsonEncode({
-        'uid': 'uid-9',
+      'desktop_auth_session_v2': jsonEncode({
+        'uid': 'central-uid-1',
         'refreshToken': 'refresh-1',
       }),
     });
     final service = DesktopAuthService(
       clientId: 'client-123',
-      firebaseApiKey: 'fake-key',
+      firebaseApiKey: 'app-key',
+      centralApiKey: 'central-key',
       session: fc.FirebaseAuthSession(
-        apiKey: 'fake-key',
+        apiKey: 'app-key',
         httpClient: MockClient(
           (_) async => throw const SocketException('No route to host'),
         ),
@@ -234,59 +381,82 @@ void main() {
     await service.initialize();
 
     expect(service.snapshot.state, SpectrumAuthState.signedIn);
-    expect(service.currentUser?.uid, 'uid-9');
+    expect(service.currentUser?.uid, 'central-uid-1');
     final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getString('desktop_auth_session_v1'), isNotNull);
-
-    expect(await service.idToken(), isNull);
+    expect(prefs.getString('desktop_auth_session_v2'), isNotNull);
   });
 
   test('initialize drops a corrupt stored payload', () async {
     SharedPreferences.setMockInitialValues(<String, Object>{
-      'desktop_auth_session_v1': 'not json at all',
+      'desktop_auth_session_v2': 'not json at all',
     });
     final service = _service();
+    addTearDown(service.dispose);
     await service.initialize();
 
     expect(service.snapshot.state, SpectrumAuthState.signedOut);
     final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getString('desktop_auth_session_v1'), isNull);
+    expect(prefs.getString('desktop_auth_session_v2'), isNull);
   });
 
-  test('a refresh refused mid-session signs the app out', () async {
-    var now = DateTime.utc(2026, 1, 1, 12);
-    final endedFor = <String>[];
-    final service = DesktopAuthService(
-      clientId: 'client-123',
-      firebaseApiKey: 'fake-key',
-      session: fc.FirebaseAuthSession(
-        apiKey: 'fake-key',
-        httpClient: _firebaseBackend(refreshStatus: 403),
-        clock: () => now,
-      ),
-      signInFlow: () async => const fc.GoogleTokens(idToken: 'google-id-token'),
-    );
+  test('signOut clears the session and the persisted copy', () async {
+    final service = _service();
     addTearDown(service.dispose);
-    service.onSessionEnded = (uid) async => endedFor.add(uid);
-
-    await service.initialize();
     await service.signIn();
-    expect(service.snapshot.state, SpectrumAuthState.signedIn);
-
-    now = now.add(const Duration(hours: 2));
-    expect(await service.idToken(), isNull);
-
-    await pumpEventQueue();
+    await service.signOut();
 
     expect(service.snapshot.state, SpectrumAuthState.signedOut);
-    expect(endedFor, <String>['uid-9']);
+    expect(await service.idToken(), isNull);
     final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getString('desktop_auth_session_v1'), isNull);
+    expect(prefs.getString('desktop_auth_session_v2'), isNull);
+  });
+
+  test('signOut drops the data scoped to the user who left', () async {
+    final service = _service();
+    addTearDown(service.dispose);
+    final ended = <String>[];
+    service.onSessionEnded = (uid) async => ended.add(uid);
+    await service.signIn();
+    await service.signOut();
+
+    expect(ended, <String>['central-uid-1']);
+  });
+
+  test('signOut completes when clearing the cached data fails', () async {
+    final service = _service();
+    addTearDown(service.dispose);
+    service.onSessionEnded = (_) async =>
+        throw const FileSystemException('locked');
+    await service.signIn();
+    await service.signOut();
+
+    expect(service.snapshot.state, SpectrumAuthState.signedOut);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('desktop_auth_session_v2'), isNull);
+  });
+
+  test('a revoked session drops the data cached for it', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'desktop_auth_session_v2': jsonEncode({
+        'uid': 'uid-gone',
+        'refreshToken': 'refresh-1',
+      }),
+    });
+    final backend = _firebaseBackend(refreshStatus: 400);
+    final service = _service(client: backend);
+    addTearDown(service.dispose);
+    final ended = <String>[];
+    service.onSessionEnded = (uid) async => ended.add(uid);
+    await service.initialize();
+
+    expect(service.snapshot.state, SpectrumAuthState.signedOut);
+    expect(ended, <String>['uid-gone']);
   });
 
   test('signOut tears the session down exactly once', () async {
     final endedFor = <String>[];
     final service = _service();
+    addTearDown(service.dispose);
     service.onSessionEnded = (uid) async => endedFor.add(uid);
 
     await service.initialize();
@@ -295,19 +465,21 @@ void main() {
     await pumpEventQueue();
 
     expect(service.snapshot.state, SpectrumAuthState.signedOut);
-    expect(endedFor, <String>['uid-9']);
+    expect(endedFor, <String>['central-uid-1']);
   });
 
   test('a sign-out that throws still ends the session', () async {
     final endedFor = <String>[];
     final service = DesktopAuthService(
       clientId: 'client-123',
-      firebaseApiKey: 'fake-key',
+      firebaseApiKey: 'app-key',
+      centralApiKey: 'central-key',
       session: _ThrowingSignOutSession(
-        apiKey: 'fake-key',
+        apiKey: 'app-key',
         httpClient: _firebaseBackend(),
       ),
       signInFlow: () async => const fc.GoogleTokens(idToken: 'google-id-token'),
+      centralHttpClient: _firebaseBackend(),
     );
     addTearDown(service.dispose);
     service.onSessionEnded = (uid) async => endedFor.add(uid);
@@ -318,21 +490,23 @@ void main() {
     await pumpEventQueue();
 
     expect(service.snapshot.state, SpectrumAuthState.signedOut);
-    expect(endedFor, <String>['uid-9']);
+    expect(endedFor, <String>['central-uid-1']);
     final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getString('desktop_auth_session_v1'), isNull);
+    expect(prefs.getString('desktop_auth_session_v2'), isNull);
   });
 
   test('the service still works after a sign-out that threw', () async {
     final endedFor = <String>[];
     final service = DesktopAuthService(
       clientId: 'client-123',
-      firebaseApiKey: 'fake-key',
+      firebaseApiKey: 'app-key',
+      centralApiKey: 'central-key',
       session: _ThrowingSignOutSession(
-        apiKey: 'fake-key',
+        apiKey: 'app-key',
         httpClient: _firebaseBackend(),
       ),
       signInFlow: () async => const fc.GoogleTokens(idToken: 'google-id-token'),
+      centralHttpClient: _firebaseBackend(),
     );
     addTearDown(service.dispose);
     service.onSessionEnded = (uid) async => endedFor.add(uid);
@@ -345,21 +519,25 @@ void main() {
     await service.signIn();
     expect(service.snapshot.state, SpectrumAuthState.signedIn);
     final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getString('desktop_auth_session_v1'), isNotNull);
+    expect(prefs.getString('desktop_auth_session_v2'), isNotNull);
   });
 
   test('overlapping initialize calls leave one live subscription', () async {
     final endedFor = <String>[];
     var now = DateTime.utc(2026, 1, 1, 12);
+
+    final session = _ListenerCountingSession(
+      apiKey: 'app-key',
+      httpClient: _refusingLaterRefreshes(),
+      clock: () => now,
+    );
     final service = DesktopAuthService(
       clientId: 'client-123',
-      firebaseApiKey: 'fake-key',
-      session: fc.FirebaseAuthSession(
-        apiKey: 'fake-key',
-        httpClient: _firebaseBackend(refreshStatus: 403),
-        clock: () => now,
-      ),
+      firebaseApiKey: 'app-key',
+      centralApiKey: 'central-key',
+      session: session,
       signInFlow: () async => const fc.GoogleTokens(idToken: 'google-id-token'),
+      centralHttpClient: _firebaseBackend(),
     );
     addTearDown(service.dispose);
     service.onSessionEnded = (uid) async => endedFor.add(uid);
@@ -369,18 +547,21 @@ void main() {
       service.initialize(),
       service.initialize(),
     ]);
-    await service.signIn();
 
+    expect(session.liveListeners, 1);
+
+    await service.signIn();
     now = now.add(const Duration(hours: 2));
     expect(await service.idToken(), isNull);
     await pumpEventQueue();
 
-    expect(endedFor, <String>['uid-9']);
+    expect(endedFor, <String>['central-uid-1']);
   });
 
   test('signing in during a teardown keeps the new session', () async {
     final releaseCleanup = Completer<void>();
     final service = _service();
+    addTearDown(service.dispose);
     service.onSessionEnded = (_) => releaseCleanup.future;
 
     await service.initialize();
@@ -396,19 +577,21 @@ void main() {
 
     expect(service.snapshot.state, SpectrumAuthState.signedIn);
     final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getString('desktop_auth_session_v1'), isNotNull);
+    expect(prefs.getString('desktop_auth_session_v2'), isNotNull);
   });
 
   test('a failed sign-in flow emits a friendly error', () async {
     final service = DesktopAuthService(
       clientId: 'client-123',
-      firebaseApiKey: 'fake-key',
+      firebaseApiKey: 'app-key',
+      centralApiKey: 'central-key',
       session: fc.FirebaseAuthSession(
-        apiKey: 'fake-key',
+        apiKey: 'app-key',
         httpClient: _firebaseBackend(),
       ),
       signInFlow: () async =>
           throw StateError('Sign-in was cancelled or denied.'),
+      centralHttpClient: _firebaseBackend(),
     );
     addTearDown(service.dispose);
     await service.signIn();
@@ -416,4 +599,365 @@ void main() {
     expect(service.snapshot.state, SpectrumAuthState.error);
     expect(service.snapshot.error, 'Sign-in was cancelled or denied.');
   });
+
+  test('an unanticipated failure is named on the screen', () async {
+    final service = DesktopAuthService(
+      clientId: 'client-123',
+      firebaseApiKey: 'app-key',
+      centralApiKey: 'central-key',
+      session: fc.FirebaseAuthSession(
+        apiKey: 'app-key',
+        httpClient: _firebaseBackend(),
+      ),
+      signInFlow: () async => throw const _UnexpectedFailure(),
+      centralHttpClient: _firebaseBackend(),
+    );
+    addTearDown(service.dispose);
+    await service.signIn();
+
+    expect(service.snapshot.state, SpectrumAuthState.error);
+    expect(
+      service.snapshot.error,
+      'Sign-in failed (_UnexpectedFailure). Please try again.',
+    );
+  });
+
+  test('an unapproved account surfaces the approval error', () async {
+    final service = _service(
+      callableStatus: 403,
+      callableBody: {
+        'error': {
+          'code': 403,
+          'message': 'Account not approved.',
+          'status': 'PERMISSION_DENIED',
+        },
+      },
+    );
+    addTearDown(service.dispose);
+    await service.signIn();
+
+    expect(service.snapshot.state, SpectrumAuthState.error);
+    expect(service.snapshot.error, contains('not approved'));
+    expect(service.currentUser, isNull);
+  });
+
+  test('an unregistered app surfaces the registration error', () async {
+    final service = _service(
+      callableStatus: 404,
+      callableBody: {
+        'error': {
+          'code': 404,
+          'message': 'No app registered for "spectrumpit".',
+          'status': 'NOT_FOUND',
+        },
+      },
+    );
+    addTearDown(service.dispose);
+    await service.signIn();
+
+    expect(service.snapshot.state, SpectrumAuthState.error);
+    expect(service.snapshot.error, contains('not registered'));
+  });
+
+  test(
+    'a refused custom-token exchange surfaces an error, not a session',
+    () async {
+      final service = _service(exchangeStatus: 400);
+      addTearDown(service.dispose);
+      await service.signIn();
+
+      expect(service.snapshot.state, SpectrumAuthState.error);
+      expect(service.currentUser, isNull);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('desktop_auth_session_v2'), isNull);
+    },
+  );
+
+  test(
+    'signIn still works through a TimeoutHttpClient-wrapped session',
+    () async {
+      final service = DesktopAuthService(
+        clientId: 'client-123',
+        firebaseApiKey: 'app-key',
+        centralApiKey: 'central-key',
+        session: fc.FirebaseAuthSession(
+          apiKey: 'app-key',
+          httpClient: TimeoutHttpClient(inner: _firebaseBackend()),
+        ),
+        signInFlow: () async =>
+            const fc.GoogleTokens(idToken: 'google-id-token'),
+        centralHttpClient: _firebaseBackend(),
+      );
+      addTearDown(service.dispose);
+
+      await service.signIn();
+
+      expect(service.snapshot.state, SpectrumAuthState.signedIn);
+      expect(service.currentUser?.uid, 'central-uid-1');
+    },
+  );
+
+  test(
+    'initialize lands on signedOut when something unexpected throws',
+    () async {
+      final service = DesktopAuthService(
+        clientId: 'client-123',
+        firebaseApiKey: 'app-key',
+        centralApiKey: 'central-key',
+        session: fc.FirebaseAuthSession(
+          apiKey: 'app-key',
+          httpClient: _firebaseBackend(),
+        ),
+        signInFlow: () async =>
+            const fc.GoogleTokens(idToken: 'google-id-token'),
+        prefsLoader: () async => throw StateError('disk full'),
+      );
+      addTearDown(service.dispose);
+
+      await service.initialize();
+
+      expect(service.snapshot.state, SpectrumAuthState.signedOut);
+    },
+  );
+
+  test(
+    'a restore that times out leaves the user signed in, not signed out',
+    () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'desktop_auth_session_v2': jsonEncode({
+          'uid': 'central-uid-1',
+          'refreshToken': 'refresh-1',
+        }),
+      });
+      final hangingBackend = MockClient(
+        (_) => Completer<http.Response>().future,
+      );
+      final service = DesktopAuthService(
+        clientId: 'client-123',
+        firebaseApiKey: 'app-key',
+        centralApiKey: 'central-key',
+        session: fc.FirebaseAuthSession(
+          apiKey: 'app-key',
+          httpClient: TimeoutHttpClient(
+            inner: hangingBackend,
+            timeout: const Duration(milliseconds: 50),
+          ),
+        ),
+        signInFlow: () async =>
+            const fc.GoogleTokens(idToken: 'google-id-token'),
+      );
+      addTearDown(service.dispose);
+
+      await service.initialize().timeout(const Duration(seconds: 2));
+
+      expect(service.snapshot.state, SpectrumAuthState.signedIn);
+      expect(service.currentUser?.uid, 'central-uid-1');
+    },
+  );
+
+  test(
+    'a hanging getCustomToken call ends in error instead of hanging sign-in',
+    () async {
+      final hangingCallable = MockClient((request) async {
+        if (request.url.path.endsWith('/getCustomToken')) {
+          return Completer<http.Response>().future;
+        }
+        if (request.url.path.contains('accounts:signInWithCustomToken')) {
+          return http.Response(
+            jsonEncode({
+              'idToken': _idTokenFor('central-uid-1'),
+              'refreshToken': 'refresh-1',
+              'expiresIn': '3600',
+            }),
+            200,
+          );
+        }
+        expect(request.url.path, contains('accounts:signInWithIdp'));
+        return http.Response(
+          jsonEncode({
+            'localId': 'central-uid-1',
+            'idToken': 'central-token-1',
+            'refreshToken': 'central-refresh-1',
+            'expiresIn': '3600',
+            'displayName': 'Dana Scout',
+            'email': 'dana@example.com',
+          }),
+          200,
+        );
+      });
+      final service = DesktopAuthService(
+        clientId: 'client-123',
+        firebaseApiKey: 'app-key',
+        centralApiKey: 'central-key',
+        session: fc.FirebaseAuthSession(
+          apiKey: 'app-key',
+          httpClient: _firebaseBackend(),
+        ),
+        signInFlow: () async =>
+            const fc.GoogleTokens(idToken: 'google-id-token'),
+        centralHttpClient: hangingCallable,
+        customTokenTimeout: const Duration(milliseconds: 50),
+      );
+      addTearDown(service.dispose);
+
+      await service.signIn().timeout(const Duration(seconds: 2));
+
+      expect(service.snapshot.state, SpectrumAuthState.error);
+    },
+  );
+
+  test(
+    'a hanging custom-token exchange ends in error instead of hanging sign-in',
+    () async {
+      final hangingExchange = MockClient((request) async {
+        if (request.url.path.contains('accounts:signInWithCustomToken')) {
+          return Completer<http.Response>().future;
+        }
+        if (request.url.path.endsWith('/getCustomToken')) {
+          return http.Response(
+            jsonEncode({
+              'result': {'customToken': 'custom-token-1'},
+            }),
+            200,
+          );
+        }
+        expect(request.url.path, contains('accounts:signInWithIdp'));
+        return http.Response(
+          jsonEncode({
+            'localId': 'central-uid-1',
+            'idToken': 'central-token-1',
+            'refreshToken': 'central-refresh-1',
+            'expiresIn': '3600',
+            'displayName': 'Dana Scout',
+            'email': 'dana@example.com',
+          }),
+          200,
+        );
+      });
+      final service = DesktopAuthService(
+        clientId: 'client-123',
+        firebaseApiKey: 'app-key',
+        centralApiKey: 'central-key',
+        session: fc.FirebaseAuthSession(
+          apiKey: 'app-key',
+          httpClient: _firebaseBackend(),
+        ),
+        signInFlow: () async =>
+            const fc.GoogleTokens(idToken: 'google-id-token'),
+        centralHttpClient: hangingExchange,
+        exchangeTimeout: const Duration(milliseconds: 50),
+      );
+      addTearDown(service.dispose);
+
+      await service.signIn().timeout(const Duration(seconds: 2));
+
+      expect(service.snapshot.state, SpectrumAuthState.error);
+    },
+  );
+
+  group('desktop central approval re-check', () {
+    test(
+      'a session stored before the central key existed keeps working',
+      () async {
+        SharedPreferences.setMockInitialValues(<String, Object>{
+          'desktop_auth_session_v2': jsonEncode(_appSession),
+        });
+        final service = _service(
+          callableStatus: 403,
+          callableBody: _deniedCallable,
+        );
+        addTearDown(service.dispose);
+        await service.initialize();
+        await pumpEventQueue();
+
+        expect(service.snapshot.state, SpectrumAuthState.signedIn);
+      },
+    );
+
+    test('a single denial keeps the member signed in', () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'desktop_auth_session_v2': jsonEncode(_appSession),
+        'desktop_central_session_v1': jsonEncode(_centralSession),
+      });
+      final service = _service(
+        callableStatus: 403,
+        callableBody: _deniedCallable,
+      );
+      addTearDown(service.dispose);
+      await service.initialize();
+      await pumpEventQueue();
+
+      expect(service.snapshot.state, SpectrumAuthState.signedIn);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getInt('central_approval_denials_v1'), 1);
+    });
+
+    test('a second denial ends the session', () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'desktop_auth_session_v2': jsonEncode(_appSession),
+        'desktop_central_session_v1': jsonEncode(_centralSession),
+        'central_approval_denials_v1': 1,
+      });
+      final service = _service(
+        callableStatus: 403,
+        callableBody: _deniedCallable,
+      );
+      addTearDown(service.dispose);
+      await service.initialize();
+      await pumpEventQueue();
+
+      expect(service.snapshot.state, SpectrumAuthState.error);
+      expect(service.snapshot.error, contains('not approved'));
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('desktop_central_session_v1'), isNull);
+    });
+
+    test(
+      'an unreachable central platform keeps the member signed in',
+      () async {
+        SharedPreferences.setMockInitialValues(<String, Object>{
+          'desktop_auth_session_v2': jsonEncode(_appSession),
+          'desktop_central_session_v1': jsonEncode(_centralSession),
+        });
+        final service = _service(
+          callableStatus: 500,
+          callableBody: const <String, Object?>{
+            'error': {'message': 'boom'},
+          },
+        );
+        addTearDown(service.dispose);
+        await service.initialize();
+        await pumpEventQueue();
+
+        expect(service.snapshot.state, SpectrumAuthState.signedIn);
+        final prefs = await SharedPreferences.getInstance();
+        expect(prefs.getInt('central_approval_denials_v1'), isNull);
+      },
+    );
+  });
+
+  test(
+    'the default central http client is bounded, and covers a cold start',
+    () {
+      final source = File('lib/src/services/desktop_auth_service.dart')
+          .readAsStringSync();
+      expect(
+        source.contains(
+          'timeout: customTokenTimeout ?? _defaultCustomTokenTimeout',
+        ),
+        isTrue,
+        reason:
+            'the central http client default must carry the callable timeout',
+      );
+      expect(source.contains('centralHttpClient ?? http.Client()'), isFalse);
+      expect(
+        source.contains('centralHttpClient ?? TimeoutHttpClient()'),
+        isFalse,
+      );
+    },
+  );
+}
+
+class _UnexpectedFailure implements Exception {
+  const _UnexpectedFailure();
 }

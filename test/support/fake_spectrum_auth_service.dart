@@ -59,6 +59,26 @@ class FakeSpectrumAuthService implements SpectrumAuthService {
     );
   }
 
+  final List<String> displayNameUpdates = [];
+
+  @override
+  Future<void> updateDisplayName(String displayName) async {
+    displayNameUpdates.add(displayName);
+    final user = _snapshot.user;
+    if (user == null) throw StateError('No user is signed in.');
+    _emit(
+      SpectrumAuthSnapshot(
+        state: SpectrumAuthState.signedIn,
+        user: SpectrumUser(
+          uid: user.uid,
+          displayName: displayName,
+          email: user.email,
+          photoUrl: user.photoUrl,
+        ),
+      ),
+    );
+  }
+
   @override
   Future<void> signOut() async {
     signOutCalls++;

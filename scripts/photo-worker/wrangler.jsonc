@@ -1,0 +1,21 @@
+{
+  "name": "spectrumpit-photos",
+  "main": "src/index.mjs",
+  "compatibility_date": "2026-07-01",
+
+  "account_id": "YOUR_CLOUDFLARE_ACCOUNT_ID",
+  "r2_buckets": [
+    {
+      "binding": "PHOTOS",
+      "bucket_name": "spectrumpit-photos"
+    }
+  ],
+  "vars": {
+    "FIREBASE_PROJECT": "spectrumpit",
+
+    "ALLOWED_ORIGINS": "https://spectrumpit.web.app,https://spectrumpit-staging.web.app,https://spectrumpit-preview.web.app,https://spectrumpit-nightly.web.app,https://spectrumpit-stable.web.app,http://localhost:5000"
+  },
+  "observability": {
+    "enabled": true
+  }
+}
