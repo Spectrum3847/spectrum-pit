@@ -24,7 +24,7 @@ jobs:
       - name: Install Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.47.3
+          flutter-version: 3.47.5
           cache: true
 
       - name: Fetch packages
@@ -38,3 +38,6 @@ jobs:
 
       - name: Run tests
         run: flutter test
+
+      - name: Check REUSE compliance
+        uses: fsfe/reuse-action@676e2d560c9a403aa252096d99fcab3e1132b0f5
