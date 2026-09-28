@@ -1,9 +1,9 @@
 # Setup guide: contributing with no prior coding experience
 
 This guide is for someone who has never used a terminal or contributed to a
-project on GitHub before. It covers Windows, macOS, and Linux, and two ways
-to get the project running: installing the Flutter SDK, or using Docker or
-Podman so you do not have to install anything Flutter-specific at all.
+project on GitHub before. It covers Windows, macOS, and Linux, and walks
+through installing the Flutter SDK the project pins so its checks run the
+same way locally as they do in CI.
 
 If you already know Git and Flutter, you probably want
 [CONTRIBUTING.md](../CONTRIBUTING.md) instead.
@@ -52,43 +52,17 @@ tells you what to run and check; you can run the terminal commands from
 Desktop Plus's own terminal view, or from your OS terminal, whichever you
 find easier.
 
-## Two ways to run the project's checks
+## Running the project's checks
 
-Before you open a pull request, three checks need to pass. There are two ways
-to get them running, and you only need one:
+Before you open a pull request, three checks need to pass: format, analyze,
+and test. Installing the Flutter SDK below also gives you `flutter run`, so
+you can see the app itself, not just the checks.
 
-1. **Install the Flutter SDK.** This gives you `flutter run` too, so you can
-   see the app itself, not just the checks.
-2. **Use Docker or Podman.** The project ships a script,
-   [`scripts/docker-test.sh`](../scripts/docker-test.sh), that runs the
-   checks inside a container with Flutter already installed. Nothing
-   Flutter-specific touches your computer. This is the faster path if you
-   only want to fix a bug or docs and do not plan to run the app itself.
-
-   The script looks for a command literally named `docker`. Docker Desktop
-   provides that. If you installed Podman instead and it did not set up a
-   `docker` alias for you, either install your distribution's
-   `podman-docker` package (it makes `docker` point at `podman`), or skip
-   the script and run the equivalent command directly:
-
-   ```
-   podman run --rm -v "$PWD":/app:Z -v flutter_pubcache:/root/.pub-cache \
-     -w /app ghcr.io/project516/flutter:3.47.2 \
-     bash -c "flutter pub get && dart format --output=none --set-exit-if-changed . \
-              && flutter analyze --fatal-infos && flutter test"
-   ```
-
-   Use that image rather than `ghcr.io/cirruslabs/flutter:stable`, which a lot
-   of Flutter guides still recommend. Cirrus Labs stopped publishing in May
-   2026, so its `stable` is frozen at Flutter 3.44.0 and cannot resolve this
-   project's SDK constraint. The named volume is a cache, so the second run is
-   much faster than the first.
-
-The project pins Flutter 3.47.2 and Dart 3.13.2.
+The project pins Flutter 3.47.5 and Dart 3.13.4. Install that version (not
+whatever your OS package manager offers by default) so `dart format`'s output
+matches what CI expects.
 
 ## Windows
-
-### Option A: install Flutter
 
 1. Install [Git for Windows](https://git-scm.com/download/win) if you do not
    already have Git (Desktop Plus needs it, or you can use Git Bash directly).
@@ -108,22 +82,7 @@ The project pins Flutter 3.47.2 and Dart 3.13.2.
    flutter test
    ```
 
-### Option B: Docker or Podman, no Flutter install
-
-1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-   for Windows, or [Podman](https://podman.io/docs/installation) if you
-   prefer it.
-2. Clone the repository.
-3. `scripts/docker-test.sh` is a bash script. Run it from Git Bash (installed
-   alongside Git for Windows) or from WSL:
-
-   ```
-   ./scripts/docker-test.sh
-   ```
-
 ## macOS
-
-### Option A: install Flutter
 
 1. Install [Homebrew](https://brew.sh/) if you do not have it, then follow
    the official [Flutter install guide for
@@ -139,20 +98,7 @@ The project pins Flutter 3.47.2 and Dart 3.13.2.
    flutter test
    ```
 
-### Option B: Docker or Podman, no Flutter install
-
-1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-   for Mac, or Podman (`brew install podman`, then `podman machine init &&
-   podman machine start`).
-2. Clone the repository, open Terminal in that folder, and run:
-
-   ```
-   ./scripts/docker-test.sh
-   ```
-
 ## Linux
-
-### Option A: install Flutter
 
 1. Follow the official [Flutter install guide for
    Linux](https://docs.flutter.dev/get-started/install/linux).
@@ -166,20 +112,6 @@ The project pins Flutter 3.47.2 and Dart 3.13.2.
    flutter analyze --fatal-infos
    flutter test
    ```
-
-### Option B: Docker or Podman, no Flutter install
-
-1. Install Docker or Podman through your distribution's package manager
-   (for example `sudo apt install podman` on Debian/Ubuntu, or see the
-   [Podman install docs](https://podman.io/docs/installation) for others).
-2. Clone the repository and run:
-
-   ```
-   ./scripts/docker-test.sh
-   ```
-
-   Set `FLUTTER_DOCKER_IMAGE` first if you want to pin a specific Flutter
-   image tag instead of the default.
 
 ## What the checks mean
 
@@ -218,11 +150,3 @@ before you push. Running them first just saves a round trip.
 - `master` is the default branch; branch off it and target it.
 - See [CONTRIBUTING.md](../CONTRIBUTING.md) for the rest, including the
   license terms your contribution is made under.
-
-## Further reading
-
-Two videos the maintainer found useful, linked here as optional background,
-not specific to this repository:
-
-- ["You're reading way too much code"](https://www.youtube.com/watch?v=434cG4g5KLE)
-- ["Claude Code's creator has some really good advice"](https://www.youtube.com/watch?v=xmGY276gEFY)

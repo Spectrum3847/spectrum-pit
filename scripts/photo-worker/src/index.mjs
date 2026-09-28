@@ -87,9 +87,26 @@ async function upload(request, env, cors) {
     return problem(413, 'Image too large', cors);
   }
 
-  const body = await request.arrayBuffer();
+  let total = 0;
+  const limited = new TransformStream({
+    transform(chunk, controller) {
+      total += chunk.byteLength;
+      if (total > MAX_BYTES) {
+        controller.error(new Error('too-large'));
+        return;
+      }
+      controller.enqueue(chunk);
+    },
+  });
+
+  let body;
+  try {
+    body = await new Response(request.body?.pipeThrough(limited)).arrayBuffer();
+  } catch (error) {
+    if (error?.message === 'too-large') return problem(413, 'Image too large', cors);
+    throw error;
+  }
   if (body.byteLength === 0) return problem(400, 'Empty body', cors);
-  if (body.byteLength > MAX_BYTES) return problem(413, 'Image too large', cors);
 
   const key = `${crypto.randomUUID()}.${extension}`;
   await env.PHOTOS.put(key, body, { httpMetadata: { contentType: type } });
@@ -107,7 +124,7 @@ async function download(env, key, cors) {
       'Content-Type': object.httpMetadata?.contentType ?? 'application/octet-stream',
       'Content-Length': String(object.size),
 
-      'Cache-Control': 'private, max-age=86400',
+      'Cache-Control': 'no-store',
       ...cors,
     },
   });

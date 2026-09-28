@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart'
+    show debugDefaultTargetPlatformOverride;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -70,4 +72,86 @@ void main() {
     expect(controller.themeMode, ThemeMode.system);
     controller.dispose();
   });
+
+  test('defaults glass on for iOS with no saved preference', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+    final controller = ThemeController();
+    await controller.bootstrap();
+
+    expect(controller.liquidGlass, isTrue);
+    controller.dispose();
+  });
+
+  for (final platform in [TargetPlatform.macOS, TargetPlatform.android]) {
+    test('defaults glass off for $platform with no saved preference', () async {
+      debugDefaultTargetPlatformOverride = platform;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+      final controller = ThemeController();
+      await controller.bootstrap();
+
+      expect(controller.liquidGlass, isFalse);
+      controller.dispose();
+    });
+  }
+
+  test('a saved false preference wins over the iOS default', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    SharedPreferences.setMockInitialValues({'app_liquid_glass': false});
+
+    final controller = ThemeController();
+    await controller.bootstrap();
+
+    expect(controller.liquidGlass, isFalse);
+    controller.dispose();
+  });
+
+  test('a saved true preference wins over the macOS default', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    SharedPreferences.setMockInitialValues({'app_liquid_glass': true});
+
+    final controller = ThemeController();
+    await controller.bootstrap();
+
+    expect(controller.liquidGlass, isTrue);
+    controller.dispose();
+  });
+
+  test('liquid glass survives a relaunch', () async {
+    final first = ThemeController(liquidGlassDefault: false);
+    await first.bootstrap();
+    await first.setLiquidGlass(true);
+    first.dispose();
+
+    final second = ThemeController(liquidGlassDefault: false);
+    await second.bootstrap();
+
+    expect(second.liquidGlass, isTrue);
+    second.dispose();
+  });
+
+  test(
+    'setting glass notifies once, and re-setting the same value does not',
+    () async {
+      final controller = ThemeController(liquidGlassDefault: false);
+      await controller.bootstrap();
+
+      var notifications = 0;
+      controller.addListener(() => notifications++);
+
+      await controller.setLiquidGlass(true);
+      expect(notifications, 1);
+
+      await controller.setLiquidGlass(true);
+      expect(notifications, 1);
+
+      await controller.setLiquidGlass(false);
+      expect(notifications, 2);
+      controller.dispose();
+    },
+  );
 }

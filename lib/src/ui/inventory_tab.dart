@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/inventory_item.dart';
+import '../services/sync_error.dart';
 import '../state/inventory_controller.dart';
 import '../theme/pit_palette.dart';
 import 'location_code.dart';
+import '../widgets/glass_modal.dart';
 import '../widgets/keyboard_shortcuts.dart';
 
 class InventoryTab extends StatefulWidget {
@@ -89,32 +91,31 @@ class _InventoryTabState extends State<InventoryTab> {
 
   void _showSyncError(String action, Object error) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text('Could not $action: $error')));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(describeSyncError(action, error))));
   }
 
   Future<bool> _confirmDelete(BuildContext context, String name) async {
-    final ok = await showDialog<bool>(
+    final ok = await showGlassConfirmDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete tool?'),
-        content: Text(
-          'Remove "$name" from the inventory. This cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(ctx).colorScheme.error,
-            ),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
+      title: 'Delete tool?',
+      content: Text(
+        'Remove "$name" from the inventory. This cannot be undone.',
       ),
+      actionsBuilder: (dialogContext) => [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: Theme.of(dialogContext).colorScheme.error,
+          ),
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          child: const Text('Delete'),
+        ),
+      ],
     );
     return ok ?? false;
   }

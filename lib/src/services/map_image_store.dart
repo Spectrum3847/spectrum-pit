@@ -1,13 +1,15 @@
-import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:file_selector/file_selector.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/widgets.dart' show FileImage, ImageProvider, Size;
-import 'package:path_provider/path_provider.dart';
+import 'package:flutter/widgets.dart' show ImageProvider, MemoryImage, Size;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/map_location.dart';
+import 'map_diagram_blob_store.dart';
+import 'map_diagram_blob_store_web.dart'
+    if (dart.library.io) 'map_diagram_blob_store_io.dart'
+    as blob_store;
 
 XTypeGroup diagramTypeGroup() => const XTypeGroup(
   label: 'images',
@@ -33,62 +35,65 @@ abstract class MapImageStore {
 }
 
 class LocalMapImageStore implements MapImageStore {
-  LocalMapImageStore({Future<XFile?> Function()? filePicker})
-    : _filePicker = filePicker ?? _defaultFilePicker;
+  LocalMapImageStore({
+    Future<XFile?> Function()? filePicker,
+    MapDiagramBlobStore? blobStore,
+  }) : _filePicker = filePicker ?? _defaultFilePicker,
+       _blobs = blobStore ?? blob_store.createMapDiagramBlobStore();
 
   static const String _prefsPrefix = 'pit_map_image_';
 
   final Future<XFile?> Function() _filePicker;
+  final MapDiagramBlobStore _blobs;
 
   @override
-  bool get isSupported => !kIsWeb;
+  bool get isSupported => true;
 
   @override
   Future<MapDiagram?> diagramFor(MapType mapType) async {
-    if (!isSupported) return null;
     final prefs = await SharedPreferences.getInstance();
     final filename = prefs.getString(_prefsKey(mapType));
     if (filename == null || filename.isEmpty) return null;
-    final dir = await getApplicationSupportDirectory();
-    final file = File('${dir.path}/$filename');
-    if (!file.existsSync()) return null;
-    return MapDiagram(image: FileImage(file), size: await _decodeSize(file));
+    final bytes = await _blobs.read(filename);
+    if (bytes == null) return null;
+    return MapDiagram(
+      image: MemoryImage(bytes),
+      size: await _decodeSize(bytes),
+    );
   }
 
   @override
   Future<MapDiagram?> pickDiagram(MapType mapType) async {
-    if (!isSupported) return null;
     final picked = await _filePicker();
     if (picked == null) return null;
-    final dir = await getApplicationSupportDirectory();
     final prefs = await SharedPreferences.getInstance();
     final filename = 'map_${mapType.name}${_extensionOf(picked.name)}';
-
     final previous = prefs.getString(_prefsKey(mapType));
-    if (previous != null && previous.isNotEmpty && previous != filename) {
-      final stale = File('${dir.path}/$previous');
-      if (stale.existsSync()) await stale.delete();
-    }
-    final dest = File('${dir.path}/$filename');
-    await dest.writeAsBytes(await picked.readAsBytes());
+    final bytes = await picked.readAsBytes();
+
+    await _blobs.write(filename, bytes);
     await prefs.setString(_prefsKey(mapType), filename);
-    return MapDiagram(image: FileImage(dest), size: await _decodeSize(dest));
+    if (previous != null && previous.isNotEmpty && previous != filename) {
+      try {
+        await _blobs.delete(previous);
+      } catch (_) {}
+    }
+    return MapDiagram(
+      image: MemoryImage(bytes),
+      size: await _decodeSize(bytes),
+    );
   }
 
   @override
   Future<void> clearDiagram(MapType mapType) async {
-    if (!isSupported) return;
     final prefs = await SharedPreferences.getInstance();
     final filename = prefs.getString(_prefsKey(mapType));
     if (filename == null || filename.isEmpty) return;
-    final dir = await getApplicationSupportDirectory();
-    final file = File('${dir.path}/$filename');
-    if (file.existsSync()) await file.delete();
+    await _blobs.delete(filename);
     await prefs.remove(_prefsKey(mapType));
   }
 
-  static Future<Size> _decodeSize(File file) async {
-    final bytes = await file.readAsBytes();
+  static Future<Size> _decodeSize(Uint8List bytes) async {
     final codec = await ui.instantiateImageCodec(bytes);
     try {
       final frame = await codec.getNextFrame();

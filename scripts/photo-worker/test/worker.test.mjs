@@ -151,7 +151,7 @@ test('upload stores the image and returns a key the download route accepts', asy
     const got = await worker.fetch(request('GET', `/photos/${key}`, { token }), env);
     assert.equal(got.status, 200);
     assert.equal(got.headers.get('Content-Type'), 'image/jpeg');
-    assert.equal(got.headers.get('Cache-Control'), 'private, max-age=86400');
+    assert.equal(got.headers.get('Cache-Control'), 'no-store');
   });
 });
 
@@ -180,6 +180,32 @@ test('upload refuses a body over the cap even when Content-Length lies', async (
       }),
       env,
     );
+    assert.equal(res.status, 413);
+    assert.equal(env.PHOTOS.objects.size, 0);
+  });
+});
+
+test('upload refuses a streamed body over the cap with no declared Content-Length', async () => {
+
+  const token = tokenFor({ sub: 'uid1' });
+  const env = { ...ENV_BASE, PHOTOS: fakeBucket() };
+  await withFirestore(token, ['pit'], async () => {
+    const chunkSize = 64 * 1024;
+    const chunks = Math.ceil((2 * 1024 * 1024 + 1) / chunkSize);
+    const body = new ReadableStream({
+      start(controller) {
+        for (let i = 0; i < chunks; i++) controller.enqueue(new Uint8Array(chunkSize));
+        controller.close();
+      },
+    });
+    const req = new Request('https://photos.example/photos', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'image/png' },
+      body,
+      duplex: 'half',
+    });
+    assert.equal(req.headers.get('Content-Length'), null);
+    const res = await worker.fetch(req, env);
     assert.equal(res.status, 413);
     assert.equal(env.PHOTOS.objects.size, 0);
   });

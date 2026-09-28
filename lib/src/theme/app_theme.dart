@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import 'pit_palette.dart';
 
 TextStyle pitCodeStyle(BuildContext context, {Color? color}) {
-  return GoogleFonts.ibmPlexMono(
-    fontSize: 13,
+  return TextStyle(
+    fontFamily: 'IBM Plex Mono',
+    fontSize: 14,
     fontWeight: FontWeight.w500,
-    letterSpacing: 0.26,
+    letterSpacing: 0.28,
     color: color,
   );
 }
@@ -29,40 +29,46 @@ const _segmentedButtonTheme = SegmentedButtonThemeData(
 );
 
 TextTheme _textThemeFor(TextTheme base, Color ink) {
-  final title = GoogleFonts.ibmPlexSans(
-    fontSize: 18,
+  final title = TextStyle(
+    fontFamily: 'IBM Plex Sans',
+    fontSize: 20,
     fontWeight: FontWeight.w700,
     height: 1.3,
     color: ink,
   );
-  return GoogleFonts.ibmPlexSansTextTheme(base).copyWith(
-    displayLarge: title,
-    displayMedium: title,
-    displaySmall: title,
-    headlineLarge: title,
-    headlineMedium: title,
-    headlineSmall: title,
-    titleLarge: title,
-    titleMedium: title,
-    bodyLarge: GoogleFonts.ibmPlexSans(
-      fontSize: 14,
-      fontWeight: FontWeight.w400,
-      height: 1.45,
-      color: ink,
-    ),
-    bodyMedium: GoogleFonts.ibmPlexSans(
-      fontSize: 14,
-      fontWeight: FontWeight.w400,
-      height: 1.45,
-      color: ink,
-    ),
-    labelLarge: GoogleFonts.ibmPlexSans(
-      fontSize: 13,
-      fontWeight: FontWeight.w600,
-      letterSpacing: 0.13,
-      color: ink,
-    ),
-  );
+  return base
+      .apply(fontFamily: 'IBM Plex Sans')
+      .copyWith(
+        displayLarge: title,
+        displayMedium: title,
+        displaySmall: title,
+        headlineLarge: title,
+        headlineMedium: title,
+        headlineSmall: title,
+        titleLarge: title,
+        titleMedium: title,
+        bodyLarge: TextStyle(
+          fontFamily: 'IBM Plex Sans',
+          fontSize: 16,
+          fontWeight: FontWeight.w400,
+          height: 1.45,
+          color: ink,
+        ),
+        bodyMedium: TextStyle(
+          fontFamily: 'IBM Plex Sans',
+          fontSize: 16,
+          fontWeight: FontWeight.w400,
+          height: 1.45,
+          color: ink,
+        ),
+        labelLarge: TextStyle(
+          fontFamily: 'IBM Plex Sans',
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.14,
+          color: ink,
+        ),
+      );
 }
 
 ThemeData _themeFrom({
@@ -79,8 +85,6 @@ ThemeData _themeFrom({
   required Color onError,
 }) {
   final isDark = brightness == Brightness.dark;
-
-  GoogleFonts.config.allowRuntimeFetching = false;
   final base = isDark
       ? ThemeData.dark(useMaterial3: true)
       : ThemeData.light(useMaterial3: true);
@@ -110,7 +114,7 @@ ThemeData _themeFrom({
     scaffoldBackgroundColor: canvas,
     canvasColor: canvas,
     textTheme: textTheme,
-    fontFamily: GoogleFonts.ibmPlexSans().fontFamily,
+    fontFamily: 'IBM Plex Sans',
     dividerTheme: DividerThemeData(color: outline, thickness: 1, space: 1),
     appBarTheme: AppBarTheme(
       backgroundColor: canvas,
@@ -180,8 +184,14 @@ ThemeData _themeFrom({
       selectedColor: accentPrimary,
       side: BorderSide(color: outline),
       shape: _smShape,
-      labelStyle: textTheme.labelLarge,
-      secondaryLabelStyle: textTheme.labelLarge?.copyWith(color: Colors.white),
+
+      labelStyle: textTheme.labelLarge?.copyWith(
+        color: WidgetStateColor.resolveWith(
+          (states) =>
+              states.contains(WidgetState.selected) ? PitPalette.onAccent : ink,
+        ),
+      ),
+      checkmarkColor: PitPalette.onAccent,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
     ),
 

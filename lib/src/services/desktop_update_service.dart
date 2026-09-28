@@ -56,6 +56,7 @@ class DesktopUpdateService {
     DesktopSelfUpdatePlatform Function()? platformLoader,
     String? buildTimestamp,
     DateTime Function()? now,
+    this._assetSelector,
   }) : _client = client ?? TimeoutHttpClient(),
        _currentVersionLoader = currentVersionLoader ?? _defaultVersionLoader,
        _repositories = repositories ?? _defaultRepositories,
@@ -69,6 +70,8 @@ class DesktopUpdateService {
   ];
 
   static const String channelKey = 'desktop_update_channel';
+
+  static const String autoUpdateKey = 'desktop_auto_update_enabled';
 
   static const String _envBuildTimestamp = String.fromEnvironment(
     'BUILD_TIMESTAMP',
@@ -84,6 +87,9 @@ class DesktopUpdateService {
   final String _buildTimestamp;
   final DateTime Function() _now;
 
+  final ({String? url, String? digest}) Function(dynamic assets)?
+  _assetSelector;
+
   Future<DesktopUpdateChannel> currentChannel() async {
     final prefs = await _prefsLoader();
     return DesktopUpdateChannel.fromName(prefs.getString(channelKey));
@@ -92,6 +98,16 @@ class DesktopUpdateService {
   Future<void> setChannel(DesktopUpdateChannel channel) async {
     final prefs = await _prefsLoader();
     await prefs.setString(channelKey, channel.name);
+  }
+
+  Future<bool> autoUpdateEnabled() async {
+    final prefs = await _prefsLoader();
+    return prefs.getBool(autoUpdateKey) ?? false;
+  }
+
+  Future<void> setAutoUpdateEnabled(bool enabled) async {
+    final prefs = await _prefsLoader();
+    await prefs.setBool(autoUpdateKey, enabled);
   }
 
   Future<DesktopUpdateCheck> checkForUpdate({
@@ -229,7 +245,9 @@ class DesktopUpdateService {
     if (url == null) {
       return null;
     }
-    final asset = _selfUpdateAsset(decoded['assets'], _platform());
+    final asset = _assetSelector != null
+        ? _assetSelector(decoded['assets'])
+        : _selfUpdateAsset(decoded['assets'], _platform());
     return _ReleaseSnapshot(
       version: version,
       rawTag: tagName,

@@ -84,6 +84,8 @@ Future<void> _waitFor(
 }
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues(<String, Object>{}));
+
   group('classifyCentralAuthError over FirebaseFunctionsException codes', () {
     test('permission-denied means the account is not approved', () {
       expect(

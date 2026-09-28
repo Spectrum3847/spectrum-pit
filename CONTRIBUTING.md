@@ -11,7 +11,7 @@ Thanks for your interest. This repository is a release mirror, which changes the
 
 ## Before you open a PR
 
-- Toolchain: Flutter 3.47.2 / Dart 3.13.2.
+- Toolchain: Flutter 3.47.5 / Dart 3.13.4.
 - Run the same gates CI runs:
 
 ```bash
@@ -28,3 +28,5 @@ flutter test
 ## Attribution and license
 
 Your name and email, taken from your git commits, are preserved as the author when the maintainer applies your change privately and again when it reappears here in the next sync. By contributing you agree that your contribution is licensed under AGPL-3.0, the same license as the project.
+
+Add yourself to [CONTRIBUTORS.md](CONTRIBUTORS.md) in your first PR.

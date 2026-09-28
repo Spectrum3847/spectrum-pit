@@ -8,11 +8,13 @@ import '../models/inventory_item.dart';
 import '../models/packing_record.dart';
 import '../services/container_photo_sync_service.dart';
 import '../services/photo_service.dart';
+import '../services/sync_error.dart';
 import '../state/inventory_controller.dart';
 import '../state/packing_controller.dart';
 import '../theme/app_theme.dart';
 import '../theme/pit_palette.dart';
 import 'packing_photo.dart';
+import '../widgets/glass_modal.dart';
 import '../widgets/keyboard_shortcuts.dart';
 
 class PackingTab extends StatefulWidget {
@@ -402,8 +404,9 @@ class _PackingTabState extends State<PackingTab> {
 
   void _showFailure(String action, Object error) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text('Could not $action: $error')));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(describeSyncError(action, error))));
   }
 
   Future<void> _openEditor({_PackingRowData? row}) {
@@ -455,27 +458,25 @@ class _PackingTabState extends State<PackingTab> {
   }
 
   Future<bool> _confirmDelete(BuildContext context, String itemId) async {
-    final ok = await showDialog<bool>(
+    final ok = await showGlassConfirmDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete packing record?'),
-        content: Text(
-          'Remove item "$itemId" from the packing list. This cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(ctx).colorScheme.error,
-            ),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
+      title: 'Delete packing record?',
+      content: Text(
+        'Remove item "$itemId" from the packing list. This cannot be undone.',
       ),
+      actionsBuilder: (dialogContext) => [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: Theme.of(dialogContext).colorScheme.error,
+          ),
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          child: const Text('Delete'),
+        ),
+      ],
     );
     return ok ?? false;
   }
@@ -581,7 +582,13 @@ class _PackingRow extends StatelessWidget {
                   onTap: onPhotoTap,
                 ),
                 const SizedBox(width: 8),
-                _StatusChip(status: record.packingStatus, onTap: onAdvance),
+
+                Flexible(
+                  child: _StatusChip(
+                    status: record.packingStatus,
+                    onTap: onAdvance,
+                  ),
+                ),
               ],
             ),
           ),
@@ -1136,8 +1143,9 @@ class _RecordEditorSheetState extends State<_RecordEditorSheet> {
 
   void _showFailure(String action, Object error) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text('Could not $action: $error')));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(describeSyncError(action, error))));
   }
 
   Future<void> _save() async {

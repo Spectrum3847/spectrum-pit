@@ -25,13 +25,20 @@ class InFlightLocalWrites<T extends Object> {
 
   void recordPush(String id, T value, WriteToken token) {
     if (_recording) {
-      _writes[id] = (token._value, value);
+      _recordCompleted(id, token._value, value);
     }
   }
 
   void recordDelete(String id, WriteToken token) {
     if (_recording) {
-      _writes[id] = (token._value, null);
+      _recordCompleted(id, token._value, null);
+    }
+  }
+
+  void _recordCompleted(String id, int token, T? value) {
+    final current = _writes[id];
+    if (current == null || token > current.$1) {
+      _writes[id] = (token, value);
     }
   }
 

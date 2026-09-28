@@ -7,10 +7,13 @@ import 'package:uuid/uuid.dart';
 import '../models/inventory_item.dart';
 import '../models/map_location.dart';
 import '../services/map_image_store.dart';
+import '../services/sync_error.dart';
 import '../state/inventory_controller.dart';
 import '../state/map_location_controller.dart';
 import '../theme/pit_palette.dart';
 import 'location_code.dart';
+import '../widgets/glass_modal.dart';
+import '../widgets/glass_popup_menu.dart';
 import '../widgets/keyboard_shortcuts.dart';
 
 class MapsTab extends StatefulWidget {
@@ -79,26 +82,24 @@ class _MapsTabState extends State<MapsTab> {
     try {
       final pins = widget.controller.locationsForMap(target);
       if (pins.isNotEmpty) {
-        final ok = await showDialog<bool>(
+        final ok = await showGlassConfirmDialog<bool>(
           context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Replace diagram?'),
-            content: Text(
-              'There ${pins.length == 1 ? 'is 1 pin' : 'are ${pins.length} pins'} '
-              'on this ${target.name} map. Replacing the diagram may misalign '
-              'them.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(false),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(ctx).pop(true),
-                child: const Text('Replace'),
-              ),
-            ],
+          title: 'Replace diagram?',
+          content: Text(
+            'There ${pins.length == 1 ? 'is 1 pin' : 'are ${pins.length} pins'} '
+            'on this ${target.name} map. Replacing the diagram may misalign '
+            'them.',
           ),
+          actionsBuilder: (dialogContext) => [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Replace'),
+            ),
+          ],
         );
         if (ok != true || !mounted) return;
       }
@@ -121,28 +122,26 @@ class _MapsTabState extends State<MapsTab> {
     final target = _mapType;
     setState(() => _diagramActionInFlight = true);
     try {
-      final ok = await showDialog<bool>(
+      final ok = await showGlassConfirmDialog<bool>(
         context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Remove diagram?'),
-          content: const Text(
-            'This clears the map diagram for everyone. Existing pins stay and '
-            'will reappear on the next diagram you set.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: Theme.of(ctx).colorScheme.error,
-              ),
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Remove'),
-            ),
-          ],
+        title: 'Remove diagram?',
+        content: const Text(
+          'This clears the map diagram for everyone. Existing pins stay and '
+          'will reappear on the next diagram you set.',
         ),
+        actionsBuilder: (dialogContext) => [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(dialogContext).colorScheme.error,
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
       );
       if (ok != true || !mounted) return;
       await widget.imageStore.clearDiagram(target);
@@ -203,7 +202,7 @@ class _MapsTabState extends State<MapsTab> {
             (item) => item?.id == pin.inventoryItemId,
             orElse: () => null,
           );
-    return showModalBottomSheet<void>(
+    return showGlassModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
 
@@ -231,33 +230,32 @@ class _MapsTabState extends State<MapsTab> {
   }
 
   Future<bool> _confirmDelete(BuildContext context, String name) async {
-    final ok = await showDialog<bool>(
+    final ok = await showGlassConfirmDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete pin?'),
-        content: Text('Remove "$name" from the map. This cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
+      title: 'Delete pin?',
+      content: Text('Remove "$name" from the map. This cannot be undone.'),
+      actionsBuilder: (dialogContext) => [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: Theme.of(dialogContext).colorScheme.error,
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(ctx).colorScheme.error,
-            ),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          child: const Text('Delete'),
+        ),
+      ],
     );
     return ok ?? false;
   }
 
   void _showSyncError(String action, Object error) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text('Could not $action: $error')));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(describeSyncError(action, error))));
   }
 
   @override
@@ -299,7 +297,7 @@ class _MapsTabState extends State<MapsTab> {
                       ),
 
                       if (_diagram != null && widget.imageStore.isSupported)
-                        PopupMenuButton<String>(
+                        GlassPopupMenuButton<String>(
                           tooltip: 'Diagram options',
                           enabled: !_diagramActionInFlight,
                           onSelected: (value) {

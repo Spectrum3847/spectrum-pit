@@ -13,15 +13,18 @@ class LocationCode extends StatelessWidget {
   Widget build(BuildContext context) {
     final muted = PitPalette.inkMutedOf(context);
     final value = code.trim();
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          label,
-          style: Theme.of(context).textTheme.labelLarge?.copyWith(color: muted),
+        Flexible(
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.labelLarge
+                ?.copyWith(color: muted),
+          ),
         ),
         const SizedBox(width: 6),
-
         Flexible(
           child: Text(
             value.isEmpty ? '--' : value.toUpperCase(),

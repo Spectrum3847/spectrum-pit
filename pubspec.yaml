@@ -3,7 +3,7 @@ description: "FRC pit logistics app. Ships to iOS, Android, and desktop."
 
 publish_to: 'none'
 
-version: 1.9.0+12
+version: 1.10.0+13
 
 environment:
   sdk: ^3.13.0
@@ -12,18 +12,23 @@ dependencies:
   flutter:
     sdk: flutter
 
-  google_fonts: ^8.2.1
-  cloud_firestore: ^6.9.0
-  firebase_auth: ^6.6.1
-  firebase_core: ^4.14.0
-  cloud_functions: ^6.4.0
+  cloud_firestore: ^6.10.0
+  firebase_auth: ^6.7.0
+  firebase_core: ^4.15.0
+  cloud_functions: ^6.5.0
   google_sign_in: ^7.2.0
   http: ^1.2.2
 
   firestore_client:
     git:
       url: https://github.com/Project516/firestore_client.git
-      ref: v0.5.0
+      ref: v0.6.0
+
+  liquid_glass:
+    git:
+      url: https://github.com/Project516/spectrumflutter-native.git
+      ref: liquid_glass-v0.7.0
+      path: packages/liquid_glass
   shared_preferences: ^2.5.5
   uuid: ^4.6.0
   package_info_plus: ^10.2.1
@@ -38,15 +43,19 @@ dependencies:
   pub_semver: ^2.2.1
   crypto: ^3.0.6
 
+  web: ^1.1.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
 
-  fake_cloud_firestore: ^4.2.0
+  fake_cloud_firestore: ^4.3.0
   firebase_auth_mocks: ^0.15.1
   flutter_lints: ^6.0.0
   google_sign_in_platform_interface: ^3.1.0
   plugin_platform_interface: ^2.1.8
+
+  cross_file: ^0.3.5+4
 
 flutter:
 

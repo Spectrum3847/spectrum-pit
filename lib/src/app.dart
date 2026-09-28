@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 
 import 'services/container_photo_sync_service.dart';
@@ -13,10 +14,19 @@ import 'state/inventory_controller.dart';
 import 'state/map_location_controller.dart';
 import 'state/packing_controller.dart';
 import 'state/pit_shift_controller.dart';
+import 'state/scout_shift_mirror_controller.dart';
 import 'state/theme_controller.dart';
 import 'state/user_role_controller.dart';
 import 'theme/app_theme.dart';
 import 'ui/app_shell.dart';
+
+class _AppScrollBehavior extends MaterialScrollBehavior {
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+    ...super.dragDevices,
+    PointerDeviceKind.mouse,
+  };
+}
 
 class StrategyApp extends StatefulWidget {
   const StrategyApp({
@@ -31,6 +41,7 @@ class StrategyApp extends StatefulWidget {
     required this.containerPhotoSyncService,
     required this.photoService,
     required this.pitShiftController,
+    required this.scoutShiftMirrorController,
     this.issueReportService,
     this.telemetryService,
     super.key,
@@ -47,6 +58,7 @@ class StrategyApp extends StatefulWidget {
   final ContainerPhotoSyncService containerPhotoSyncService;
   final PhotoService photoService;
   final PitShiftController pitShiftController;
+  final ScoutShiftMirrorController scoutShiftMirrorController;
   final IssueReportService? issueReportService;
   final TelemetryService? telemetryService;
 
@@ -80,6 +92,7 @@ class _StrategyAppState extends State<StrategyApp> {
       widget.borrowController.bootstrap(),
       widget.mapLocationController.bootstrap(),
       widget.pitShiftController.bootstrap(),
+      widget.scoutShiftMirrorController.bootstrap(),
     ]);
   }
 
@@ -104,6 +117,7 @@ class _StrategyAppState extends State<StrategyApp> {
     widget.mapLocationController.dispose();
     widget.photoService.close();
     widget.pitShiftController.dispose();
+    widget.scoutShiftMirrorController.dispose();
     super.dispose();
   }
 
@@ -119,6 +133,7 @@ class _StrategyAppState extends State<StrategyApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Spectrum Pit',
+      scrollBehavior: _AppScrollBehavior(),
       theme: buildAppTheme(),
       darkTheme: buildDarkAppTheme(),
       themeMode: widget.themeController.themeMode,
@@ -148,6 +163,7 @@ class _StrategyAppState extends State<StrategyApp> {
             containerPhotoSyncService: widget.containerPhotoSyncService,
             photoService: widget.photoService,
             pitShiftController: widget.pitShiftController,
+            scoutShiftMirrorController: widget.scoutShiftMirrorController,
             issueReportService: widget.issueReportService,
             telemetryService: widget.telemetryService,
           );

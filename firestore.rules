@@ -96,6 +96,11 @@ service cloud.firestore {
       allow delete: if isAuthed() && isMember();
     }
 
+    match /scoutShifts/{eventKey} {
+      allow read: if isAuthed() && isMember();
+      allow write: if false;
+    }
+
     match /bugReports/{reportId} {
       allow read: if isAuthed() && (isAdmin() || isDeveloper());
       allow create: if isAuthed() && isMember()
@@ -339,7 +344,7 @@ service cloud.firestore {
       return data.keys().hasOnly(['reporterUid', 'reporterName', 'title',
               'body', 'status', 'createdAt', 'appVersion', 'platform',
               'osVersion', 'deviceInfo', 'roles', 'id', 'kind', 'area',
-              'impact'])
+              'impact', 'screenshotKeys'])
         && data.reporterUid is string
         && data.reporterUid.size() > 0
         && data.reporterUid.size() <= 128
@@ -366,7 +371,11 @@ service cloud.firestore {
         && (!('area' in data)
             || (data.area is string && data.area.size() <= 64))
         && (!('impact' in data)
-            || (data.impact is string && data.impact.size() <= 64));
+            || (data.impact is string && data.impact.size() <= 64))
+
+        && (!('screenshotKeys' in data)
+            || (data.screenshotKeys is list
+                && data.screenshotKeys.size() <= 3));
     }
 
     function isValidTelemetry(data) {

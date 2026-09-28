@@ -4,25 +4,32 @@ import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/pit_shift.dart';
+import '../models/scout_shift_mirror.dart';
 import '../models/user_profile.dart';
 import '../models/user_role.dart';
 import '../services/spectrum_auth_service.dart';
+import '../services/sync_error.dart';
 import '../state/pit_shift_controller.dart';
+import '../state/scout_shift_mirror_controller.dart';
 import '../state/user_role_controller.dart';
 import '../theme/app_theme.dart';
 import '../theme/pit_palette.dart';
+import '../widgets/glass_modal.dart';
 import '../widgets/keyboard_shortcuts.dart';
 import 'driver_schedule_screen.dart';
 
 class ScheduleTab extends StatefulWidget {
   const ScheduleTab({
     required this.controller,
+    required this.scoutShiftController,
     required this.authService,
     required this.roleController,
     super.key,
   });
 
   final PitShiftController controller;
+
+  final ScoutShiftMirrorController scoutShiftController;
   final SpectrumAuthService authService;
 
   final UserRoleController roleController;
@@ -38,7 +45,10 @@ class _ScheduleTabState extends State<ScheduleTab> {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: widget.controller,
+      animation: Listenable.merge([
+        widget.controller,
+        widget.scoutShiftController,
+      ]),
       builder: (context, _) {
         final competitions = _competitions();
         final competition = _selectedCompetition(competitions);
@@ -110,6 +120,13 @@ class _ScheduleTabState extends State<ScheduleTab> {
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
             children: [
               _DriverScheduleEntry(onOpen: _openDriverSchedule),
+              if (widget.scoutShiftController.forCompetition(competition)
+                  case final mirror?)
+                _ScoutShiftSection(
+                  mirror: mirror,
+                  uid: uid,
+                  mineOnly: _mineOnly,
+                ),
               if (shownConflicts.isNotEmpty)
                 _ConflictPanel(conflicts: shownConflicts),
               if (rows.isEmpty)
@@ -139,6 +156,8 @@ class _ScheduleTabState extends State<ScheduleTab> {
     final names = <String>{
       for (final shift in widget.controller.items)
         if (shift.competition.isNotEmpty) shift.competition,
+      for (final mirror in widget.scoutShiftController.items)
+        if (mirror.competition.isNotEmpty) mirror.competition,
     }.toList();
     names.sort();
     return names;
@@ -229,39 +248,38 @@ class _ScheduleTabState extends State<ScheduleTab> {
 
   Future<bool> _confirmDelete(BuildContext context, PitShift shift) async {
     final unavailable = shift.kind == ShiftKind.unavailable;
-    final ok = await showDialog<bool>(
+    final ok = await showGlassConfirmDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(unavailable ? 'Remove this block?' : 'Delete shift?'),
-        content: Text(
-          unavailable
-              ? 'Remove "${shift.label}" so this time counts as available '
-                    'again. This cannot be undone.'
-              : 'Remove "${shift.label}" from the schedule. This cannot be '
-                    'undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(ctx).colorScheme.error,
-            ),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(unavailable ? 'Remove' : 'Delete'),
-          ),
-        ],
+      title: unavailable ? 'Remove this block?' : 'Delete shift?',
+      content: Text(
+        unavailable
+            ? 'Remove "${shift.label}" so this time counts as available '
+                  'again. This cannot be undone.'
+            : 'Remove "${shift.label}" from the schedule. This cannot be '
+                  'undone.',
       ),
+      actionsBuilder: (dialogContext) => [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: Theme.of(dialogContext).colorScheme.error,
+          ),
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          child: Text(unavailable ? 'Remove' : 'Delete'),
+        ),
+      ],
     );
     return ok ?? false;
   }
 
   void _showSyncError(String action, Object error) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text('Could not $action: $error')));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(describeSyncError(action, error))));
   }
 }
 
@@ -641,6 +659,104 @@ class _DriverScheduleEntry extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ScoutShiftSection extends StatelessWidget {
+  const _ScoutShiftSection({
+    required this.mirror,
+    required this.uid,
+    required this.mineOnly,
+  });
+
+  final ScoutShiftMirror mirror;
+  final String? uid;
+  final bool mineOnly;
+
+  @override
+  Widget build(BuildContext context) {
+    final rotations = mirror.rotations.where((r) => r.shifts.isNotEmpty);
+    final rows = mineOnly
+        ? rotations.where((r) => uid != null && r.uid == uid).toList()
+        : rotations.toList();
+    if (rows.isEmpty) return const SizedBox.shrink();
+
+    final muted = PitPalette.inkMutedOf(context);
+    final syncedAt = mirror.syncedAt.toLocal();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: PitPalette.surfaceOf(context),
+        borderRadius: BorderRadius.circular(PitPalette.radiusSm),
+        border: Border.all(color: PitPalette.outlineOf(context)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Scouting shifts',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'From Spectrum Strategy, synced ${_formatSyncedAt(syncedAt)}',
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(color: muted),
+          ),
+          const SizedBox(height: 12),
+          for (final rotation in rows)
+            _ScoutRotationRow(
+              rotation: rotation,
+              mine: uid != null && rotation.uid == uid,
+            ),
+        ],
+      ),
+    );
+  }
+
+  static String _formatSyncedAt(DateTime local) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${local.month}/${local.day} ${two(local.hour)}:${two(local.minute)}';
+  }
+}
+
+class _ScoutRotationRow extends StatelessWidget {
+  const _ScoutRotationRow({required this.rotation, required this.mine});
+
+  final ScoutRotation rotation;
+  final bool mine;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final background = mine ? scheme.primaryContainer : null;
+    final foreground = mine ? scheme.onPrimaryContainer : null;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(PitPalette.radiusSm),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              rotation.name,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: foreground,
+                fontWeight: mine ? FontWeight.w600 : null,
+              ),
+            ),
+          ),
+          Text(
+            rotation.rangeText,
+            style: pitCodeStyle(context, color: foreground),
+          ),
+        ],
       ),
     );
   }

@@ -5,6 +5,8 @@ FRC pit logistics for Spectrum 3847. One app that keeps the team running at an e
 - **Inventory**: every tool and part, where it lives in the lab or the pit, with a map of both so nothing goes missing.
 - **Event packing**: the four-stage packing workflow (Packing, Staging, Loading, Ready); each item may have one optional packing photo.
 - **Borrowed tools**: track what left the pit with whom, and what came back.
+- **Maps**: lab and pit layout diagrams with tappable location pins linked back to inventory items.
+- **Schedule**: pit staffing and load-in/load-out shifts, with conflict detection for double-booked members.
 
 Built with Flutter for iOS, Android, and desktop (Windows, macOS, Linux).
 
@@ -56,8 +58,11 @@ This is the public mirror of Spectrum Pit. The team develops in a private reposi
 
 Pull requests are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md). New to Git
 or Flutter? [docs/setup-guide.md](docs/setup-guide.md) starts from scratch on
-Windows, macOS, and Linux.
+Windows, macOS, and Linux. See [CONTRIBUTORS.md](CONTRIBUTORS.md) for who has
+worked on this project.
 
 ## License
 
 [AGPL-3.0](LICENSE). If you distribute a modified version of this app, or run one as a service for others, you must make its source available under the same license.
+
+[![REUSE status](https://api.reuse.software/badge/github.com/Spectrum3847/spectrum-pit)](https://api.reuse.software/info/github.com/Spectrum3847/spectrum-pit)

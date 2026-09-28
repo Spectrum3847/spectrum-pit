@@ -79,6 +79,53 @@ void main() {
         UserRole.viewer,
       });
     });
+
+    test('a create race (already-exists) re-fetches the profile another device made', () async {
+      var getCalls = 0;
+      final service = DesktopUserRoleService(
+        firestore: _firestore(
+          MockClient((request) async {
+            if (request.method == 'GET') {
+              getCalls++;
+              if (getCalls == 1) return http.Response('not found', 404);
+              return http.Response(_profileDoc('u1', ['admin']), 200);
+            }
+            return http.Response(
+              jsonEncode({
+                'error': {
+                  'code': 409,
+                  'message': 'Document already exists',
+                  'status': 'ALREADY_EXISTS',
+                },
+              }),
+              409,
+            );
+          }),
+        ),
+      );
+      expect((await service.fetchOrCreateProfile(uid: 'u1')).roles, {
+        UserRole.admin,
+      });
+    });
+
+    test(
+      'a create failure that is not a race resolves viewer, not pit',
+      () async {
+        final service = DesktopUserRoleService(
+          firestore: _firestore(
+            MockClient((request) async {
+              if (request.method == 'GET') {
+                return http.Response('not found', 404);
+              }
+              return http.Response('denied', 403);
+            }),
+          ),
+        );
+        expect((await service.fetchOrCreateProfile(uid: 'u1')).roles, {
+          UserRole.viewer,
+        });
+      },
+    );
   });
 
   test('updateRoles patches only the roles field', () async {

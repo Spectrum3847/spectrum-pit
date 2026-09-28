@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,15 +15,20 @@ Uint8List _bytes(int length, [int fill = 7]) =>
 PickedPhoto _photo({int length = 32, String type = 'image/jpeg'}) =>
     PickedPhoto(bytes: _bytes(length), contentType: type);
 
-class _SlowWriteDiskCache extends PhotoDiskCache {
-  _SlowWriteDiskCache() : super(directoryLoader: _unused);
-
-  static Future<Directory> _unused() =>
-      throw StateError('this fake never touches the filesystem');
-
+class _SlowWriteDiskCache implements PhotoDiskCache {
   final Map<String, Uint8List> files = <String, Uint8List>{};
   final List<String> completed = <String>[];
   Completer<void>? gate;
+
+  @override
+  bool get isSupported => true;
+
+  @override
+  Future<Uint8List?> read(String key) async => files[key];
+
+  @override
+  Future<int> currentBytes() async =>
+      files.values.fold<int>(0, (sum, bytes) => sum + bytes.length);
 
   @override
   Future<void> write(String key, Uint8List bytes) async {

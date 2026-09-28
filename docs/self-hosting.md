@@ -93,13 +93,13 @@ The central project id is a build define, so this is one flag you will pass in
 step 8:
 
 ```
---dart-define=SPECTRUM_CENTRAL_PROJECT_ID=yourteam-central
+--dart-define=CENTRAL_PROJECT_ID=yourteam-central
 ```
 
 The callable endpoint follows it automatically, resolving to
 `https://us-central1-yourteam-central.cloudfunctions.net`. If you deploy the
 function outside `us-central1` or behind a custom domain, override that too
-with `--dart-define=SPECTRUM_CENTRAL_FUNCTIONS_BASE_URL=...`. It has to be
+with `--dart-define=CENTRAL_FUNCTIONS_BASE_URL=...`. It has to be
 https either way, since that URL carries a bearer token.
 
 One file still needs editing by hand: replace the values in
@@ -144,7 +144,11 @@ exports.getCustomToken = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError("unauthenticated", "Sign in first.");
   }
   const targetApp = data && data.targetApp;
-  if (typeof targetApp !== "string" || targetApp.length === 0) {
+  if (
+    typeof targetApp !== "string" ||
+    targetApp.length === 0 ||
+    targetApp.includes("/")
+  ) {
     throw new functions.https.HttpsError("invalid-argument", "targetApp required.");
   }
 
@@ -233,7 +237,7 @@ to sign in and says so, which is deliberate.
 ```
 flutter run \
   --dart-define=SPECTRUM_APP_KEY=yourapp \
-  --dart-define=SPECTRUM_CENTRAL_PROJECT_ID=yourteam-central
+  --dart-define=CENTRAL_PROJECT_ID=yourteam-central
 ```
 
 Use the same app-key string you wrote into `apps/{key}`. Pass both defines on
@@ -247,7 +251,7 @@ console:
 ```
 flutter build linux \
   --dart-define=SPECTRUM_APP_KEY=yourapp \
-  --dart-define=SPECTRUM_CENTRAL_PROJECT_ID=yourteam-central \
+  --dart-define=CENTRAL_PROJECT_ID=yourteam-central \
   --dart-define=GOOGLE_OAUTH_CLIENT_ID=...apps.googleusercontent.com \
   --dart-define=GOOGLE_OAUTH_CLIENT_SECRET=...
 ```

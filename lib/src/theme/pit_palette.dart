@@ -6,6 +6,8 @@ class PitPalette {
   static const double radiusSm = 8;
   static const double radiusLg = 12;
 
+  static const double radiusGlassPanel = 28;
+
   static const Color caseBlack = Color(0xFF131016);
   static const Color caseSurface = Color(0xFF1C1821);
   static const Color caseSurfaceStrong = Color(0xFF262130);
@@ -23,6 +25,8 @@ class PitPalette {
   static const Color violetCore = Color(0xFF7C3AED);
   static const Color violetLifted = Color(0xFFB07CFF);
   static const Color violetDeep = Color(0xFF6D28D9);
+
+  static const Color onAccent = Color(0xFFFFFFFF);
 
   static const Color statusPacking = Color(0xFFF5A623);
   static const Color statusStaging = Color(0xFF38BDF8);

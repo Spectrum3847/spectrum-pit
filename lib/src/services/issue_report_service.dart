@@ -2,14 +2,23 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:uuid/uuid.dart';
 
 import 'debug_info.dart';
+import 'photo_service.dart';
+
+const int maxReportScreenshots = 3;
+
+typedef ScreenshotUploader = Future<String?> Function(PickedPhoto photo);
 
 class IssueReportService {
-  IssueReportService({this._firestore, this._write});
+  IssueReportService({this._firestore, this._write, this._uploadScreenshot});
 
   final FirebaseFirestore? _firestore;
 
   final Future<void> Function(String docPath, Map<String, dynamic> data)?
   _write;
+
+  final ScreenshotUploader? _uploadScreenshot;
+
+  bool get supportsScreenshots => _uploadScreenshot != null;
 
   FirebaseFirestore get _db => _firestore ?? FirebaseFirestore.instance;
 
@@ -22,7 +31,7 @@ class IssueReportService {
   static String _clamp(String value, int max) =>
       value.length <= max ? value : value.substring(0, max);
 
-  Future<void> submit({
+  Future<int> submit({
     required String title,
     required String body,
     required String reporterUid,
@@ -32,8 +41,10 @@ class IssueReportService {
     String kind = 'bug',
     String area = '',
     String impact = '',
+    List<PickedPhoto> screenshots = const <PickedPhoto>[],
   }) async {
     final info = await DebugInfo.gather();
+    final keys = await _uploadScreenshots(screenshots);
 
     final id = const Uuid().v4();
     await _writeDoc(id, <String, dynamic>{
@@ -47,6 +58,7 @@ class IssueReportService {
       'kind': kind == 'feedback' ? 'feedback' : 'bug',
       if (area.isNotEmpty) 'area': _clamp(area, 64),
       if (impact.isNotEmpty) 'impact': _clamp(impact, 64),
+      if (keys.isNotEmpty) 'screenshotKeys': keys,
       'appVersion': _clamp(info.reportVersion, 64),
       'platform': _clamp(info.platform, 64),
       'osVersion': _clamp(info.osVersion, 128),
@@ -54,5 +66,17 @@ class IssueReportService {
       'status': 'new',
       'createdAt': DateTime.now().toUtc().toIso8601String(),
     });
+    return screenshots.length.clamp(0, maxReportScreenshots) - keys.length;
+  }
+
+  Future<List<String>> _uploadScreenshots(List<PickedPhoto> screenshots) async {
+    final upload = _uploadScreenshot;
+    if (upload == null || screenshots.isEmpty) return const <String>[];
+    final keys = <String>[];
+    for (final shot in screenshots.take(maxReportScreenshots)) {
+      final key = await upload(shot);
+      if (key != null && key.isNotEmpty) keys.add(key);
+    }
+    return keys;
   }
 }
