@@ -1,12 +1,16 @@
 {
+    "id": "spectrum-pit",
     "name": "Spectrum Pit",
     "short_name": "Spectrum",
     "start_url": ".",
+    "scope": "./",
     "display": "standalone",
-    "background_color": "#3C0060",
-    "theme_color": "#3C0060",
+    "display_override": ["standalone", "minimal-ui"],
+    "background_color": "#131016",
+    "theme_color": "#131016",
     "description": "Spectrum Pit: FRC pit logistics app.",
-    "orientation": "portrait-primary",
+    "orientation": "any",
+    "categories": ["productivity", "sports"],
     "prefer_related_applications": false,
     "icons": [
         {

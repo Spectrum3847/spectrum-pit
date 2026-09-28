@@ -4,14 +4,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:spectrumpit/src/models/pit_shift.dart';
+import 'package:spectrumpit/src/models/scout_shift_mirror.dart';
 import 'package:spectrumpit/src/models/user_role.dart';
 import 'package:spectrumpit/src/services/spectrum_auth_service.dart';
 import 'package:spectrumpit/src/state/pit_shift_controller.dart';
+import 'package:spectrumpit/src/state/scout_shift_mirror_controller.dart';
 import 'package:spectrumpit/src/state/user_role_controller.dart';
 import 'package:spectrumpit/src/theme/app_theme.dart';
 import 'package:spectrumpit/src/ui/schedule_tab.dart';
 
 import 'support/fake_pit_shift_sync_service.dart';
+import 'support/fake_scout_shift_mirror_sync_service.dart';
 import 'support/fake_spectrum_auth_service.dart';
 import 'support/fake_user_role_service.dart';
 
@@ -46,20 +49,28 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late FakePitShiftSyncService sync;
+  late FakeScoutShiftMirrorSyncService scoutSync;
   PitShiftController? controller;
+  ScoutShiftMirrorController? scoutShiftController;
 
   setUp(() {
     sync = FakePitShiftSyncService();
+    scoutSync = FakeScoutShiftMirrorSyncService();
 
     controller = null;
+    scoutShiftController = null;
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
 
-  tearDown(() => controller?.dispose());
+  tearDown(() {
+    controller?.dispose();
+    scoutShiftController?.dispose();
+  });
 
   Future<void> pumpTab(
     WidgetTester tester, {
     List<PitShift> shifts = const <PitShift>[],
+    List<ScoutShiftMirror> mirrors = const <ScoutShiftMirror>[],
     SpectrumUser? user = _me,
   }) async {
     tester.view.physicalSize = const Size(1000, 2400);
@@ -87,12 +98,20 @@ void main() {
     await controller!.bootstrap();
     if (shifts.isNotEmpty && user != null) sync.emit(shifts);
 
+    scoutShiftController = ScoutShiftMirrorController(
+      authService: auth,
+      syncService: scoutSync,
+    );
+    await scoutShiftController!.bootstrap();
+    if (user != null) scoutSync.emit(mirrors);
+
     await tester.pumpWidget(
       MaterialApp(
         theme: buildDarkAppTheme(),
         home: Scaffold(
           body: ScheduleTab(
             controller: controller!,
+            scoutShiftController: scoutShiftController!,
             authService: auth,
             roleController: roleController,
           ),
@@ -306,6 +325,75 @@ void main() {
     expect(saved.label, 'Load out crew');
     expect(saved.assignedUids, containsAll(<String>['uid-me', 'uid-other']));
     expect(saved.assignedNames, containsAll(<String>['Alex Reyes', 'Sam Ito']));
+  });
+
+  testWidgets('the scouting rotation shows name and match ranges', (
+    tester,
+  ) async {
+    await pumpTab(
+      tester,
+      shifts: [_shift('a', label: 'Qual block', startMatch: 18, endMatch: 34)],
+      mirrors: [
+        ScoutShiftMirror(
+          eventKey: '2026miket',
+          competition: 'Houston',
+          matchCount: 80,
+          syncedAt: DateTime.utc(2026, 4, 10, 6, 12),
+          rotations: const [
+            ScoutRotation(
+              uid: 'uid-me',
+              name: 'Alex Reyes',
+              shifts: [
+                MatchRange(startMatch: 1, endMatch: 6),
+                MatchRange(startMatch: 13, endMatch: 18),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+
+    expect(find.text('Scouting shifts'), findsOneWidget);
+    expect(find.text('Alex Reyes'), findsAtLeastNWidgets(1));
+    expect(find.text('Q1-6, Q13-18'), findsOneWidget);
+  });
+
+  testWidgets('Mine hides other people from the scouting rotation', (
+    tester,
+  ) async {
+    await pumpTab(
+      tester,
+      shifts: [_shift('a', label: 'Qual block', startMatch: 18, endMatch: 34)],
+      mirrors: [
+        ScoutShiftMirror(
+          eventKey: '2026miket',
+          competition: 'Houston',
+          matchCount: 80,
+          syncedAt: DateTime.utc(2026, 4, 10, 6, 12),
+          rotations: const [
+            ScoutRotation(
+              uid: 'uid-me',
+              name: 'Alex Reyes',
+              shifts: [MatchRange(startMatch: 1, endMatch: 6)],
+            ),
+            ScoutRotation(
+              uid: 'uid-other',
+              name: 'Sam Ito',
+              shifts: [MatchRange(startMatch: 7, endMatch: 12)],
+            ),
+          ],
+        ),
+      ],
+    );
+
+    expect(find.text('Alex Reyes'), findsAtLeastNWidgets(1));
+    expect(find.text('Sam Ito'), findsOneWidget);
+
+    await tester.tap(find.text('Mine'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Alex Reyes'), findsAtLeastNWidgets(1));
+    expect(find.text('Sam Ito'), findsNothing);
   });
 
   testWidgets('signed out, the Mine view says to sign in', (tester) async {

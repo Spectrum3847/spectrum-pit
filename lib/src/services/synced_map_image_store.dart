@@ -1,32 +1,37 @@
-import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/widgets.dart' show FileImage, Size;
-import 'package:path_provider/path_provider.dart';
+import 'package:flutter/widgets.dart' show MemoryImage, Size;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/map_location.dart';
+import 'map_diagram_blob_store.dart';
+import 'map_diagram_blob_store_web.dart'
+    if (dart.library.io) 'map_diagram_blob_store_io.dart'
+    as blob_store;
 import 'map_diagram_sync_service.dart';
 import 'map_image_store.dart';
 import 'photo_service.dart';
 
 class SyncedMapImageStore implements MapImageStore {
-  SyncedMapImageStore({required this.photoService, required this.diagramSync});
+  SyncedMapImageStore({
+    required this.photoService,
+    required this.diagramSync,
+    MapDiagramBlobStore? blobStore,
+  }) : _blobs = blobStore ?? blob_store.createMapDiagramBlobStore();
 
   static const String _prefsR2Key = 'pit_map_diagram_r2key_';
   static const String _prefsFile = 'pit_map_diagram_file_';
 
   final PhotoService photoService;
   final MapDiagramSyncService diagramSync;
+  final MapDiagramBlobStore _blobs;
 
   @override
-  bool get isSupported => !kIsWeb;
+  bool get isSupported => true;
 
   @override
   Future<MapDiagram?> diagramFor(MapType mapType) async {
-    if (!isSupported) return null;
     final prefs = await SharedPreferences.getInstance();
     String? key;
     try {
@@ -37,30 +42,28 @@ class SyncedMapImageStore implements MapImageStore {
     if (key == null) return null;
     final cachedKey = prefs.getString(_prefsKey(mapType, _prefsR2Key));
     if (cachedKey == key) {
-      final file = await _cachedFile(mapType);
-      if (file != null) return await _diagramFromFile(file);
+      final cached = await _cachedBytes(mapType);
+      if (cached != null) return _diagramFromBytes(cached);
     }
     try {
       final bytes = await photoService.fetch(key);
       if (bytes == null) return null;
-      final file = await _saveToCache(mapType, key, bytes);
-      if (file == null) return null;
+      await _saveToCache(mapType, key, bytes);
       await prefs.setString(_prefsKey(mapType, _prefsR2Key), key);
-      return await _diagramFromFile(file);
+      return await _diagramFromBytes(bytes);
     } catch (_) {
       return _cachedDiagram(mapType);
     }
   }
 
   Future<MapDiagram?> _cachedDiagram(MapType mapType) async {
-    final file = await _cachedFile(mapType);
-    if (file == null) return null;
-    return await _diagramFromFile(file);
+    final bytes = await _cachedBytes(mapType);
+    if (bytes == null) return null;
+    return _diagramFromBytes(bytes);
   }
 
   @override
   Future<MapDiagram?> pickDiagram(MapType mapType) async {
-    if (!isSupported) return null;
     final picked = await photoService.pickImage();
     if (picked == null) return null;
     final bytes = picked.bytes;
@@ -68,16 +71,13 @@ class SyncedMapImageStore implements MapImageStore {
 
     await diagramSync.writeKey(mapType, key);
     final prefs = await SharedPreferences.getInstance();
-    final file = await _saveToCache(mapType, key, bytes);
-    if (file == null) return null;
+    await _saveToCache(mapType, key, bytes);
     await prefs.setString(_prefsKey(mapType, _prefsR2Key), key);
-    return await _diagramFromFile(file);
+    return _diagramFromBytes(bytes);
   }
 
   @override
   Future<void> clearDiagram(MapType mapType) async {
-    if (!isSupported) return;
-
     String? key;
     try {
       key = await diagramSync.readKey(mapType);
@@ -102,11 +102,9 @@ class SyncedMapImageStore implements MapImageStore {
       } catch (_) {}
     }
     final prefs = await SharedPreferences.getInstance();
-    final file = await _cachedFile(mapType);
-    if (file != null) {
-      try {
-        await file.delete();
-      } catch (_) {}
+    final filename = prefs.getString(_prefsKey(mapType, _prefsFile));
+    if (filename != null && filename.isNotEmpty) {
+      await _blobs.delete(filename);
     }
     await prefs.remove(_prefsKey(mapType, _prefsR2Key));
     await prefs.remove(_prefsKey(mapType, _prefsFile));
@@ -115,51 +113,42 @@ class SyncedMapImageStore implements MapImageStore {
     }
   }
 
-  Future<File?> _cachedFile(MapType mapType) async {
+  Future<Uint8List?> _cachedBytes(MapType mapType) async {
     final prefs = await SharedPreferences.getInstance();
     final filename = prefs.getString(_prefsKey(mapType, _prefsFile));
     if (filename == null || filename.isEmpty) return null;
-    final dir = await getApplicationSupportDirectory();
-    final file = File('${dir.path}/$filename');
-    if (!file.existsSync()) return null;
-    return file;
+    return _blobs.read(filename);
   }
 
-  Future<File?> _saveToCache(
+  Future<void> _saveToCache(
     MapType mapType,
     String key,
     Uint8List bytes,
   ) async {
     final ext = _extensionFromKey(key);
     final filename = 'diagram_${mapType.name}_$key.$ext';
-    final dir = await getApplicationSupportDirectory();
     final prefs = await SharedPreferences.getInstance();
     final oldName = prefs.getString(_prefsKey(mapType, _prefsFile));
-    if (oldName != null && oldName.isNotEmpty && oldName != filename) {
-      final stale = File('${dir.path}/$oldName');
-      if (stale.existsSync()) {
-        try {
-          await stale.delete();
-        } catch (_) {}
-      }
-    }
-    final file = File('${dir.path}/$filename');
-    await file.writeAsBytes(bytes);
+
+    await _blobs.write(filename, bytes);
     await prefs.setString(_prefsKey(mapType, _prefsFile), filename);
-    return file;
+    if (oldName != null && oldName.isNotEmpty && oldName != filename) {
+      try {
+        await _blobs.delete(oldName);
+      } catch (_) {}
+    }
   }
 
-  Future<MapDiagram?> _diagramFromFile(File file) async {
+  Future<MapDiagram?> _diagramFromBytes(Uint8List bytes) async {
     try {
-      final size = await _decodeSize(file);
-      return MapDiagram(image: FileImage(file), size: size);
+      final size = await _decodeSize(bytes);
+      return MapDiagram(image: MemoryImage(bytes), size: size);
     } catch (_) {
       return null;
     }
   }
 
-  static Future<Size> _decodeSize(File file) async {
-    final bytes = await file.readAsBytes();
+  static Future<Size> _decodeSize(Uint8List bytes) async {
     final codec = await ui.instantiateImageCodec(bytes);
     try {
       final frame = await codec.getNextFrame();

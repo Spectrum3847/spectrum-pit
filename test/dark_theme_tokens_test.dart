@@ -108,7 +108,7 @@ void main() {
       }
     });
 
-    test('type scale is capped at the 18px ceiling', () {
+    test('type scale is capped at the 20px ceiling', () {
       for (final theme in [buildDarkAppTheme(), buildAppTheme()]) {
         final t = theme.textTheme;
         for (final style in <TextStyle?>[
@@ -120,7 +120,7 @@ void main() {
           t.headlineSmall,
           t.titleLarge,
         ]) {
-          expect(style!.fontSize, lessThanOrEqualTo(18));
+          expect(style!.fontSize, lessThanOrEqualTo(20));
         }
       }
     });

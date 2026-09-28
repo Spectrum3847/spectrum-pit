@@ -15,12 +15,14 @@ import '../state/inventory_controller.dart';
 import '../state/map_location_controller.dart';
 import '../state/packing_controller.dart';
 import '../state/pit_shift_controller.dart';
+import '../state/scout_shift_mirror_controller.dart';
 import '../state/theme_controller.dart';
 import '../state/user_role_controller.dart';
 import '../theme/pit_palette.dart';
 import '../models/user_role.dart';
 import 'borrow_tab.dart';
 import 'docs_viewer_screen.dart';
+import 'glass_chrome.dart';
 import 'inventory_tab.dart';
 import 'maps_tab.dart';
 import 'packing_tab.dart';
@@ -29,6 +31,7 @@ import 'settings_tab.dart';
 import 'usage_tab.dart';
 import 'sign_in_screen.dart';
 import 'user_management_screen.dart';
+import '../widgets/glass_popup_menu.dart';
 
 class AppShell extends StatefulWidget {
   const AppShell({
@@ -43,9 +46,11 @@ class AppShell extends StatefulWidget {
     required this.containerPhotoSyncService,
     required this.photoService,
     required this.pitShiftController,
+    required this.scoutShiftMirrorController,
     this.issueReportService,
     this.telemetryService,
     this.usageRollupService,
+    this.debugLiquidGlassSupported,
     super.key,
   });
 
@@ -60,10 +65,14 @@ class AppShell extends StatefulWidget {
   final ContainerPhotoSyncService containerPhotoSyncService;
   final PhotoService photoService;
   final PitShiftController pitShiftController;
+  final ScoutShiftMirrorController scoutShiftMirrorController;
   final IssueReportService? issueReportService;
   final TelemetryService? telemetryService;
 
   final UsageRollupService? usageRollupService;
+
+  @visibleForTesting
+  final bool? debugLiquidGlassSupported;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -127,6 +136,10 @@ class _AppShellState extends State<AppShell> {
 
   Timer? _overdueTick;
 
+  bool _glassSupported = false;
+
+  bool get _useGlass => _glassSupported && widget.themeController.liquidGlass;
+
   @override
   void initState() {
     super.initState();
@@ -136,6 +149,14 @@ class _AppShellState extends State<AppShell> {
       if (mounted) setState(() {});
     });
     _clampIndex();
+    final override = widget.debugLiquidGlassSupported;
+    if (override != null) {
+      _glassSupported = override;
+    } else {
+      spectrumGlassSupported().then((value) {
+        if (mounted) setState(() => _glassSupported = value);
+      });
+    }
   }
 
   @override
@@ -273,6 +294,7 @@ class _AppShellState extends State<AppShell> {
           authService: widget.authService,
           issueReportService: widget.issueReportService,
           telemetryService: widget.telemetryService,
+          photoService: widget.photoService,
         );
     }
   }
@@ -299,6 +321,7 @@ class _AppShellState extends State<AppShell> {
       default:
         return ScheduleTab(
           controller: widget.pitShiftController,
+          scoutShiftController: widget.scoutShiftMirrorController,
           authService: widget.authService,
           roleController: widget.userRoleController,
         );
@@ -309,7 +332,7 @@ class _AppShellState extends State<AppShell> {
     final secondary = _secondaryTabIndices;
     return [
       if (secondary.isNotEmpty)
-        PopupMenuButton<int>(
+        GlassPopupMenuButton<int>(
           tooltip: 'More',
           icon: const Icon(Icons.more_vert_rounded),
           onSelected: _openSecondary,
@@ -445,17 +468,21 @@ class _AppShellState extends State<AppShell> {
 
         child: Focus(
           autofocus: true,
-          child: Scaffold(
-            appBar: AppBar(
-              titleSpacing: 0,
-              title: _buildTitle(context),
-              actions: _buildAppBarActions(),
-            ),
-            body: IndexedStack(index: _navIndex, children: tabs),
-            bottomNavigationBar: NavigationBar(
-              selectedIndex: _navIndex,
-              onDestinationSelected: _onNavSelected,
-              destinations: _buildDestinations(),
+
+          child: GlassChrome(
+            enabled: _useGlass,
+            child: Scaffold(
+              appBar: AppBar(
+                titleSpacing: 0,
+                title: _buildTitle(context),
+                actions: _buildAppBarActions(),
+              ),
+              body: IndexedStack(index: _navIndex, children: tabs),
+              bottomNavigationBar: NavigationBar(
+                selectedIndex: _navIndex,
+                onDestinationSelected: _onNavSelected,
+                destinations: _buildDestinations(),
+              ),
             ),
           ),
         ),

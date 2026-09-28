@@ -3,18 +3,18 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:spectrumpit/src/services/photo_disk_cache.dart';
+import 'package:spectrumpit/src/services/photo_disk_cache_io.dart';
 
 void main() {
   late Directory base;
-  late PhotoDiskCache cache;
+  late FileSystemPhotoDiskCache cache;
 
   Uint8List bytes(int size, [int fill = 7]) =>
       Uint8List.fromList(List<int>.filled(size, fill));
 
   setUp(() async {
     base = await Directory.systemTemp.createTemp('photo_cache_test');
-    cache = PhotoDiskCache(
+    cache = FileSystemPhotoDiskCache(
       directoryLoader: () async => Directory('${base.path}/photos'),
       maxBytes: 1000,
     );

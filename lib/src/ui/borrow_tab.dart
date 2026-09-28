@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/borrow_record.dart';
+import '../services/sync_error.dart';
 import '../state/borrow_controller.dart';
 import '../theme/app_theme.dart';
 import '../theme/pit_palette.dart';
+import '../widgets/glass_modal.dart';
 import '../widgets/keyboard_shortcuts.dart';
 
 class BorrowTab extends StatefulWidget {
@@ -74,14 +76,10 @@ class _BorrowTabState extends State<BorrowTab> {
             updatedAt: DateTime.now().toUtc(),
           ),
         )
-        .catchError((Object error) {
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Could not check in "${record.toolName}": $error'),
-            ),
-          );
-        });
+        .catchError(
+          (Object error) =>
+              _showSyncError('check in "${record.toolName}"', error),
+        );
   }
 
   Future<void> _openEditor({BorrowRecord? record}) {
@@ -93,14 +91,12 @@ class _BorrowTabState extends State<BorrowTab> {
       builder: (sheetContext) => _BorrowEditorSheet(
         record: record,
         onSubmit: (result) {
-          widget.controller.upsert(result).catchError((Object error) {
-            if (!mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Could not save "${result.toolName}": $error'),
-              ),
-            );
-          });
+          widget.controller
+              .upsert(result)
+              .catchError(
+                (Object error) =>
+                    _showSyncError('save "${result.toolName}"', error),
+              );
           Navigator.of(sheetContext).pop();
         },
         onDelete: record == null
@@ -111,46 +107,45 @@ class _BorrowTabState extends State<BorrowTab> {
                   record.toolName,
                 );
                 if (!confirmed) return;
-                await widget.controller.delete(record.id).catchError((
-                  Object error,
-                ) {
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        'Could not delete "${record.toolName}": $error',
-                      ),
-                    ),
-                  );
-                });
+                await widget.controller
+                    .delete(record.id)
+                    .catchError(
+                      (Object error) =>
+                          _showSyncError('delete "${record.toolName}"', error),
+                    );
                 if (sheetContext.mounted) Navigator.of(sheetContext).pop();
               },
       ),
     );
   }
 
+  void _showSyncError(String action, Object error) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(describeSyncError(action, error))));
+  }
+
   Future<bool> _confirmDelete(BuildContext context, String toolName) async {
-    final ok = await showDialog<bool>(
+    final ok = await showGlassConfirmDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete borrow record?'),
-        content: Text(
-          'Remove the loan record for "$toolName". This cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(ctx).colorScheme.error,
-            ),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
+      title: 'Delete borrow record?',
+      content: Text(
+        'Remove the loan record for "$toolName". This cannot be undone.',
       ),
+      actionsBuilder: (dialogContext) => [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: Theme.of(dialogContext).colorScheme.error,
+          ),
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          child: const Text('Delete'),
+        ),
+      ],
     );
     return ok ?? false;
   }
@@ -219,10 +214,13 @@ class _BorrowRow extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 12),
+
                     if (onCheckIn != null)
-                      FilledButton.tonal(
-                        onPressed: onCheckIn,
-                        child: const Text('Check in'),
+                      Flexible(
+                        child: FilledButton.tonal(
+                          onPressed: onCheckIn,
+                          child: const Text('Check in'),
+                        ),
                       ),
                     if (record.returned)
                       _ReturnedChip()

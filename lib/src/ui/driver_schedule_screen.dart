@@ -12,6 +12,7 @@ import '../services/driver_schedule_store.dart';
 import '../state/pit_shift_controller.dart';
 import '../theme/app_theme.dart';
 import '../theme/pit_palette.dart';
+import '../widgets/glass_modal.dart';
 
 class DriverScheduleScreen extends StatefulWidget {
   const DriverScheduleScreen({
@@ -335,29 +336,27 @@ class _DriverScheduleScreenState extends State<DriverScheduleScreen> {
     }
   }
 
-  Future<bool?> _askReplaceOrAdd(int existing) => showDialog<bool>(
+  Future<bool?> _askReplaceOrAdd(int existing) => showGlassConfirmDialog<bool>(
     context: context,
-    builder: (dialogContext) => AlertDialog(
-      title: const Text('Already imported'),
-      content: Text(
-        '$existing shift${existing == 1 ? '' : 's'} on this schedule came '
-        'from a previous import. Replace them, or add these alongside?',
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(dialogContext).pop(),
-          child: const Text('Cancel'),
-        ),
-        TextButton(
-          onPressed: () => Navigator.of(dialogContext).pop(false),
-          child: const Text('Add alongside'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(dialogContext).pop(true),
-          child: const Text('Replace'),
-        ),
-      ],
+    title: 'Already imported',
+    content: Text(
+      '$existing shift${existing == 1 ? '' : 's'} on this schedule came '
+      'from a previous import. Replace them, or add these alongside?',
     ),
+    actionsBuilder: (dialogContext) => [
+      TextButton(
+        onPressed: () => Navigator.of(dialogContext).pop(),
+        child: const Text('Cancel'),
+      ),
+      TextButton(
+        onPressed: () => Navigator.of(dialogContext).pop(false),
+        child: const Text('Add alongside'),
+      ),
+      FilledButton(
+        onPressed: () => Navigator.of(dialogContext).pop(true),
+        child: const Text('Replace'),
+      ),
+    ],
   );
 
   void _say(String message) {
@@ -368,7 +367,7 @@ class _DriverScheduleScreenState extends State<DriverScheduleScreen> {
 
   Future<void> _openPeoplePicker(ScheduleInput input) {
     final controller = _controllerFor(input.key);
-    return showModalBottomSheet<void>(
+    return showGlassModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
 

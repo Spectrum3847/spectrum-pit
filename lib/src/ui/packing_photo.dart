@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../services/photo_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/pit_palette.dart';
+import '../widgets/glass_modal.dart';
 
 enum PackingPhotoAction { replace, remove }
 
@@ -13,7 +14,7 @@ Future<PhotoSource?> choosePhotoSource(
   List<PhotoSource> sources,
 ) async {
   if (sources.length == 1) return sources.single;
-  return showModalBottomSheet<PhotoSource>(
+  return showGlassModalBottomSheet<PhotoSource>(
     context: context,
     builder: (sheetContext) => SafeArea(
       child: Padding(
@@ -134,28 +135,26 @@ class _PackingPhotoScreenState extends State<PackingPhotoScreen> {
   }
 
   Future<void> _confirmRemove() async {
-    final ok = await showDialog<bool>(
+    final ok = await showGlassConfirmDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Remove photo?'),
-        content: Text(
-          'Delete the packing photo for "${widget.itemId}". The item stays on '
-          'the list; the photo cannot be recovered.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(dialogContext).colorScheme.error,
-            ),
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Remove'),
-          ),
-        ],
+      title: 'Remove photo?',
+      content: Text(
+        'Delete the packing photo for "${widget.itemId}". The item stays on '
+        'the list; the photo cannot be recovered.',
       ),
+      actionsBuilder: (dialogContext) => [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: Theme.of(dialogContext).colorScheme.error,
+          ),
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          child: const Text('Remove'),
+        ),
+      ],
     );
     if (ok != true || !mounted) return;
     Navigator.of(context).pop(PackingPhotoAction.remove);

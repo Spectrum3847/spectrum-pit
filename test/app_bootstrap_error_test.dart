@@ -12,12 +12,14 @@ import 'support/fake_map_location_sync_service.dart';
 import 'support/fake_packing_sync_service.dart';
 import 'support/photo_test_support.dart';
 import 'support/fake_pit_shift_sync_service.dart';
+import 'support/fake_scout_shift_mirror_sync_service.dart';
 
 import 'package:spectrumpit/src/state/borrow_controller.dart';
 import 'package:spectrumpit/src/state/inventory_controller.dart';
 import 'package:spectrumpit/src/state/map_location_controller.dart';
 import 'package:spectrumpit/src/state/packing_controller.dart';
 import 'package:spectrumpit/src/state/pit_shift_controller.dart';
+import 'package:spectrumpit/src/state/scout_shift_mirror_controller.dart';
 import 'package:spectrumpit/src/state/theme_controller.dart';
 import 'package:spectrumpit/src/state/user_role_controller.dart';
 
@@ -74,6 +76,10 @@ void main() {
         pitShiftController: PitShiftController(
           authService: auth,
           syncService: FakePitShiftSyncService(),
+        ),
+        scoutShiftMirrorController: ScoutShiftMirrorController(
+          authService: auth,
+          syncService: FakeScoutShiftMirrorSyncService(),
         ),
       ),
     );

@@ -47,13 +47,13 @@ class FakeUserRoleService implements UserRoleService {
     String displayName = '',
     String? email,
   }) async {
-    if (!_roles.containsKey(uid)) {
-      _roles[uid] = {UserRole.pit};
-      _emitProfiles();
-    }
+    final firstSignIn = !_roles.containsKey(uid);
+    if (firstSignIn) _roles[uid] = {UserRole.pit};
 
     _displayNames.putIfAbsent(uid, () => displayName);
     if (email != null) _emails.putIfAbsent(uid, () => email);
+
+    if (firstSignIn) _emitProfiles();
     return profileFor(uid);
   }
 

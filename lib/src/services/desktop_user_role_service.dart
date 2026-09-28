@@ -44,8 +44,17 @@ class DesktopUserRoleService implements UserRoleService {
             'roles': ['pit'],
             'createdAt': DateTime.now().toUtc().toIso8601String(),
           }, id: uid);
-        } catch (_) {}
-        return pit;
+          return pit;
+        } on fc.FirestoreApiException catch (error) {
+          if (error.status == 'ALREADY_EXISTS' || error.statusCode == 409) {
+            final existing = await _firestore.getDocument('userProfiles/$uid');
+            if (existing != null) {
+              return UserProfile.fromJson(uid, existing.fields);
+            }
+          }
+
+          rethrow;
+        }
       }
       return UserProfile.fromJson(uid, doc.fields);
     } catch (_) {

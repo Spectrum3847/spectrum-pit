@@ -13,7 +13,7 @@
   "vars": {
     "FIREBASE_PROJECT": "spectrumpit",
 
-    "ALLOWED_ORIGINS": "https://spectrumpit.web.app,https://spectrumpit-staging.web.app,https://spectrumpit-preview.web.app,https://spectrumpit-nightly.web.app,https://spectrumpit-stable.web.app,http://localhost:5000"
+    "ALLOWED_ORIGINS": "https://spectrumpit.web.app,https://spectrumpit.firebaseapp.com,https://spectrumpit-staging.web.app,https://spectrumpit-staging.firebaseapp.com,https://spectrumpit-preview.web.app,https://spectrumpit-preview.firebaseapp.com,https://spectrumpit-nightly.web.app,https://spectrumpit-nightly.firebaseapp.com,https://spectrumpit-stable.web.app,https://spectrumpit-stable.firebaseapp.com,http://localhost:5000"
   },
   "observability": {
     "enabled": true

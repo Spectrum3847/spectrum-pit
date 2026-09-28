@@ -195,4 +195,30 @@ void main() {
       'a': 'second-write-still-outstanding',
     });
   });
+
+  test(
+    'two writes for one id completed in reverse order keep the newer value',
+    () {
+      final writes = InFlightLocalWrites<String>();
+      final window = writes.beginFetch();
+      writes.recordPush('a', 'newer', WriteToken(2));
+      writes.recordPush('a', 'older', WriteToken(1));
+      expect(writes.resolve(window, <String, String>{}), <String, String>{
+        'a': 'newer',
+      });
+    },
+  );
+
+  test(
+    'a delete landing after a newer push does not resurrect as a delete',
+    () {
+      final writes = InFlightLocalWrites<String>();
+      final window = writes.beginFetch();
+      writes.recordPush('a', 'newer', WriteToken(2));
+      writes.recordDelete('a', WriteToken(1));
+      expect(writes.resolve(window, <String, String>{}), <String, String>{
+        'a': 'newer',
+      });
+    },
+  );
 }

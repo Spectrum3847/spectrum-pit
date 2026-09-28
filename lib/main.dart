@@ -1,5 +1,7 @@
 import 'dart:async' show unawaited;
 
+import 'package:cloud_firestore/cloud_firestore.dart'
+    show FirebaseFirestore, Settings, WebPersistentMultipleTabManager;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firestore_client/firestore_client.dart' as fc;
@@ -22,7 +24,9 @@ import 'src/services/desktop_inventory_sync_service.dart';
 import 'src/services/desktop_map_diagram_sync_service.dart';
 import 'src/services/desktop_map_location_sync_service.dart';
 import 'src/services/desktop_packing_sync_service.dart';
+import 'src/services/android_startup_update.dart';
 import 'src/services/desktop_pit_shift_sync_service.dart';
+import 'src/services/desktop_startup_update.dart';
 import 'src/services/desktop_firestore_cache_stub.dart'
     if (dart.library.io) 'src/services/desktop_firestore_cache_io.dart'
     as firestore_cache_factory;
@@ -34,10 +38,14 @@ import 'src/services/map_image_store.dart';
 import 'src/services/map_diagram_sync_service.dart';
 import 'src/services/map_location_sync_service.dart';
 import 'src/services/packing_sync_service.dart';
-import 'src/services/photo_disk_cache.dart';
+import 'src/services/photo_disk_cache_web.dart'
+    if (dart.library.io) 'src/services/photo_disk_cache_io.dart'
+    as photo_disk_cache_factory;
 import 'src/services/photo_service.dart';
 import 'src/services/synced_map_image_store.dart';
 import 'src/services/pit_shift_sync_service.dart';
+import 'src/services/desktop_scout_shift_mirror_sync_service.dart';
+import 'src/services/scout_shift_mirror_sync_service.dart';
 import 'src/services/telemetry_service.dart';
 import 'src/services/http_timeout_client.dart';
 import 'src/services/spectrum_auth_service.dart';
@@ -49,6 +57,7 @@ import 'src/state/inventory_controller.dart';
 import 'src/state/map_location_controller.dart';
 import 'src/state/packing_controller.dart';
 import 'src/state/pit_shift_controller.dart';
+import 'src/state/scout_shift_mirror_controller.dart';
 import 'src/state/theme_controller.dart';
 import 'src/state/user_role_controller.dart';
 
@@ -63,6 +72,9 @@ bool get _isDesktop =>
     (defaultTargetPlatform == TargetPlatform.windows ||
         defaultTargetPlatform == TargetPlatform.macOS ||
         defaultTargetPlatform == TargetPlatform.linux);
+
+bool get _isAndroid =>
+    !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -93,6 +105,13 @@ Future<void> main() async {
     }
   }
 
+  if (firebaseReady && kIsWeb) {
+    FirebaseFirestore.instance.settings = const Settings(
+      persistenceEnabled: true,
+      webPersistentTabManager: WebPersistentMultipleTabManager(),
+    );
+  }
+
   final SpectrumAuthService authService;
   final UserRoleService roleService;
   final InventorySyncService inventorySyncService;
@@ -102,7 +121,10 @@ Future<void> main() async {
   final MapDiagramSyncService mapDiagramSyncService;
   final ContainerPhotoSyncService containerPhotoSyncService;
   final PitShiftSyncService pitShiftSyncService;
+  final ScoutShiftMirrorSyncService scoutShiftMirrorSyncService;
   IssueReportService? issueReportService;
+
+  Future<void> Function(String path, Map<String, dynamic> data)? reportWriter;
   TelemetryService? telemetryService;
 
   if (firebaseReady && !_isDesktop) {
@@ -132,6 +154,7 @@ Future<void> main() async {
     mapDiagramSyncService = FirestoreMapDiagramSyncService();
     containerPhotoSyncService = FirestoreContainerPhotoSyncService();
     pitShiftSyncService = FirestorePitShiftSyncService();
+    scoutShiftMirrorSyncService = FirestoreScoutShiftMirrorSyncService();
     telemetryService = TelemetryService();
   } else if (_isDesktop && _oauthClientId.isNotEmpty) {
     final desktopAuth = DesktopAuthService(
@@ -177,10 +200,11 @@ Future<void> main() async {
       firestore: restFirestore,
     );
     pitShiftSyncService = DesktopPitShiftSyncService(firestore: restFirestore);
-
-    issueReportService = IssueReportService(
-      write: (path, data) => restFirestore.setDocument(path, data),
+    scoutShiftMirrorSyncService = DesktopScoutShiftMirrorSyncService(
+      firestore: restFirestore,
     );
+
+    reportWriter = (path, data) => restFirestore.setDocument(path, data);
 
     telemetryService = TelemetryService(
       write: (path, data) => restFirestore.setDocument(path, data),
@@ -195,6 +219,7 @@ Future<void> main() async {
     mapDiagramSyncService = LocalMapDiagramSyncService();
     containerPhotoSyncService = LocalContainerPhotoSyncService();
     pitShiftSyncService = LocalPitShiftSyncService();
+    scoutShiftMirrorSyncService = LocalScoutShiftMirrorSyncService();
   }
 
   final themeController = ThemeController();
@@ -222,10 +247,25 @@ Future<void> main() async {
     authService: authService,
     syncService: pitShiftSyncService,
   );
+  final scoutShiftMirrorController = ScoutShiftMirrorController(
+    authService: authService,
+    syncService: scoutShiftMirrorSyncService,
+  );
 
   final photoService = PhotoService(
     idToken: authService.idToken,
-    diskCache: PhotoDiskCache(),
+    diskCache: photo_disk_cache_factory.createPhotoDiskCache(),
+  );
+
+  issueReportService = IssueReportService(
+    write: reportWriter,
+    uploadScreenshot: (photo) async {
+      try {
+        return await photoService.upload(photo);
+      } catch (_) {
+        return null;
+      }
+    },
   );
 
   final MapImageStore mapImageStore;
@@ -244,6 +284,14 @@ Future<void> main() async {
     unawaited(telemetry.logEvent('app_open'));
   }
 
+  if (_isDesktop) {
+    unawaited(runDesktopStartupUpdateCheck());
+  }
+
+  if (_isAndroid) {
+    unawaited(runAndroidStartupUpdateCheck());
+  }
+
   runApp(
     StrategyApp(
       authService: authService,
@@ -257,6 +305,7 @@ Future<void> main() async {
       containerPhotoSyncService: containerPhotoSyncService,
       photoService: photoService,
       pitShiftController: pitShiftController,
+      scoutShiftMirrorController: scoutShiftMirrorController,
       issueReportService: issueReportService,
       telemetryService: telemetryService,
     ),

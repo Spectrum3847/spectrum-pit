@@ -397,6 +397,32 @@ void main() {
     expect(check.update!.repository, 'owner/fallback');
   });
 
+  group('auto-update setting', () {
+    setUp(() {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+    });
+
+    test('defaults to disabled when nothing is persisted', () async {
+      final service = DesktopUpdateService(
+        client: _clientReturning(tag: 'v1.0.0'),
+        currentVersionLoader: () async => '1.0.0',
+      );
+      expect(await service.autoUpdateEnabled(), isFalse);
+    });
+
+    test('setAutoUpdateEnabled persists the choice', () async {
+      final service = DesktopUpdateService(
+        client: _clientReturning(tag: 'v1.0.0'),
+        currentVersionLoader: () async => '1.0.0',
+      );
+      await service.setAutoUpdateEnabled(false);
+      expect(await service.autoUpdateEnabled(), isFalse);
+
+      await service.setAutoUpdateEnabled(true);
+      expect(await service.autoUpdateEnabled(), isTrue);
+    });
+  });
+
   group('update channel (#422)', () {
     setUp(() {
       SharedPreferences.setMockInitialValues(<String, Object>{});

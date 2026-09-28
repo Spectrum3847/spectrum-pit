@@ -5,7 +5,7 @@ import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart'
-    show defaultTargetPlatform, kIsWeb, TargetPlatform;
+    show defaultTargetPlatform, TargetPlatform;
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
@@ -68,9 +68,8 @@ class PhotoService {
   final Map<String, Future<void>> _diskOps = <String, Future<void>>{};
 
   static bool get _isMobile =>
-      !kIsWeb &&
-      (defaultTargetPlatform == TargetPlatform.android ||
-          defaultTargetPlatform == TargetPlatform.iOS);
+      defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS;
 
   List<PhotoSource> get sources => _isMobile
       ? const [PhotoSource.camera, PhotoSource.gallery]

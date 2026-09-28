@@ -1,6 +1,12 @@
+import 'dart:typed_data';
+
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:spectrumpit/src/services/issue_report_service.dart';
+import 'package:spectrumpit/src/services/photo_service.dart';
+
+PickedPhoto _shot(int byte, [String type = 'image/png']) =>
+    PickedPhoto(bytes: Uint8List.fromList([byte]), contentType: type);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -167,4 +173,98 @@ void main() {
       expect(data.containsKey('impact'), isFalse);
     },
   );
+
+  test('submit uploads screenshots and stores their keys', () async {
+    final firestore = FakeFirebaseFirestore();
+    final uploaded = <String>[];
+    final service = IssueReportService(
+      firestore: firestore,
+      uploadScreenshot: (photo) async {
+        uploaded.add(photo.contentType);
+        return 'key-${photo.bytes.first}';
+      },
+    );
+
+    final dropped = await service.submit(
+      title: 't',
+      body: 'b',
+      reporterUid: 'u',
+      reporterName: 'n',
+      screenshots: [_shot(1), _shot(2, 'image/jpeg')],
+    );
+
+    expect(dropped, 0);
+    expect(uploaded, ['image/png', 'image/jpeg']);
+    final data = (await firestore.collection('bugReports').get()).docs.single
+        .data();
+    expect(data['screenshotKeys'], ['key-1', 'key-2']);
+  });
+
+  test('a screenshot that fails to upload is reported, not fatal', () async {
+    final firestore = FakeFirebaseFirestore();
+    final service = IssueReportService(
+      firestore: firestore,
+      uploadScreenshot: (photo) async =>
+          photo.bytes.first == 1 ? 'key-1' : null,
+    );
+
+    final dropped = await service.submit(
+      title: 't',
+      body: 'b',
+      reporterUid: 'u',
+      reporterName: 'n',
+      screenshots: [_shot(1), _shot(2)],
+    );
+
+    expect(dropped, 1);
+    final data = (await firestore.collection('bugReports').get()).docs.single
+        .data();
+
+    expect(data['screenshotKeys'], ['key-1']);
+    expect(data['title'], 't');
+  });
+
+  test('submit never sends more screenshots than the rules allow', () async {
+    final firestore = FakeFirebaseFirestore();
+    var calls = 0;
+    final service = IssueReportService(
+      firestore: firestore,
+      uploadScreenshot: (photo) async {
+        calls++;
+        return 'key-$calls';
+      },
+    );
+
+    final dropped = await service.submit(
+      title: 't',
+      body: 'b',
+      reporterUid: 'u',
+      reporterName: 'n',
+      screenshots: [_shot(1), _shot(2), _shot(3), _shot(4), _shot(5)],
+    );
+
+    expect(calls, maxReportScreenshots);
+    expect(dropped, 0);
+    final data = (await firestore.collection('bugReports').get()).docs.single
+        .data();
+    expect((data['screenshotKeys'] as List).length, maxReportScreenshots);
+  });
+
+  test('with no uploader the field is omitted entirely', () async {
+    final firestore = FakeFirebaseFirestore();
+    final service = IssueReportService(firestore: firestore);
+
+    expect(service.supportsScreenshots, isFalse);
+    await service.submit(
+      title: 't',
+      body: 'b',
+      reporterUid: 'u',
+      reporterName: 'n',
+      screenshots: [_shot(1)],
+    );
+
+    final data = (await firestore.collection('bugReports').get()).docs.single
+        .data();
+    expect(data.containsKey('screenshotKeys'), isFalse);
+  });
 }
