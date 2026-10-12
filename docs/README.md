@@ -23,7 +23,7 @@ instructions for each are in [README.md](../README.md).
 
 ## Building it yourself
 
-The toolchain is Flutter 3.47.5 / Dart 3.13.4. From a checkout:
+The toolchain is Flutter 3.47.7 / Dart 3.13.5. From a checkout:
 
 ```bash
 flutter pub get
