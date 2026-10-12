@@ -58,7 +58,7 @@ Before you open a pull request, three checks need to pass: format, analyze,
 and test. Installing the Flutter SDK below also gives you `flutter run`, so
 you can see the app itself, not just the checks.
 
-The project pins Flutter 3.47.5 and Dart 3.13.4. Install that version (not
+The project pins Flutter 3.47.7 and Dart 3.13.5. Install that version (not
 whatever your OS package manager offers by default) so `dart format`'s output
 matches what CI expects.
 
